@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Prospects{% endblock %}
+{% block content %}
+<section class="filters">
+  <h1>Prospects ({{ rows|length }} of {{ total }})</h1>
+  <form method="get" action="/prospects" class="row">
+    <label>Status
+      <select name="status">
+        <option value="">all</option>
+        {% for s in ["ingested", "blocked", "audited", "pending", "approved", "rejected", "pushed", "sent", "replied", "opted_out", "bounced", "error"] %}
+        <option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Grade
+      <select name="grade">
+        <option value="">all</option>
+        {% for g in ["A", "B", "C", "Reject"] %}
+        <option value="{{ g }}" {% if filter_grade == g %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Source
+      <select name="source">
+        <option value="">all</option>
+        {% for s in ["manual", "master_csv", "xlsx", "node_discovery"] %}
+        <option value="{{ s }}" {% if filter_source == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Email
+      <select name="has_email">
+        <option value="">any</option>
+        <option value="yes" {% if filter_has_email == "yes" %}selected{% endif %}>has email</option>
+        <option value="no" {% if filter_has_email == "no" %}selected{% endif %}>no email</option>
+      </select>
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+</section>
+
+<section>
+  {% if not rows %}
+    <p class="muted">No prospects match. Try clearing filters or running <code>pp-agent ingest</code>.</p>
+  {% else %}
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>Company</th>
+        <th>Industry / State</th>
+        <th>Source</th>
+        <th>Status</th>
+        <th>Grade</th>
+        <th>ICP</th>
+        <th>Email</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+      <tr class="grade-{{ r.final_grade or 'na' }}">
+        <td>
+          <strong>{{ r.company }}</strong><br>
+          <small class="muted">{{ r.url }}</small>
+        </td>
+        <td>
+          {% if r.industry %}{{ r.industry }}{% else %}<span class="muted">-</span>{% endif %}
+          {% if r.state %} • {{ r.state }}{% endif %}
+        </td>
+        <td><small>{{ r.source }}</small></td>
+        <td>
+          {{ r.status }}{% if r.blocked_reason %} <small class="bad">({{ r.blocked_reason }})</small>{% endif %}
+          {% if r.last_audit_error %}<br><small class="warnings" title="{{ r.last_audit_error }}">{{ r.audit_attempts }} failed attempt(s)</small>{% endif %}
+          {% if r.qa_pass == 0 and r.draft_status %}<span class="bad" title="QA blocked">!</span>{% endif %}
+        </td>
+        <td>{% if r.final_grade %}<span class="grade">{{ r.final_grade }}</span>{% endif %}</td>
+        <td>{{ r.icp_score or "" }}</td>
+        <td><small>{% if r.email %}{{ r.email }}{% else %}<span class="muted">-</span>{% endif %}</small></td>
+        <td><a href="/prospect/{{ r.prospect_id }}">Open →</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

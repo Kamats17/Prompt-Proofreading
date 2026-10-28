@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Drafts{% endblock %}
+{% block content %}
+{% for w in compliance %}<div class="banner">{{ w }}</div>{% endfor %}
+<section class="filters">
+  <p class="cap">New emails pushed today: <strong>{{ pushed_today }}</strong> / {{ daily_cap }} ·
+    <a href="/queue">Open the review queue →</a></p>
+  <form method="get" action="/" class="row">
+    <label>
+      Status
+      <select name="status">
+        <option value="">all</option>
+        {% for s in ["pending", "approved", "rejected", "pushed", "sent", "replied", "opted_out", "bounced", "error"] %}
+        <option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Grade
+      <select name="grade">
+        <option value="">all</option>
+        {% for g in ["A", "B", "C", "Reject"] %}
+        <option value="{{ g }}" {% if filter_grade == g %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Apply</button>
+    <span class="muted">{{ prospect_count }} prospects in DB</span>
+  </form>
+</section>
+
+<section>
+  {% if not drafts %}
+    <p class="muted">No drafts yet. Run <code>pp-agent daily</code> (or ingest, audit, then draft).</p>
+  {% else %}
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>Company</th>
+        <th>Grade</th>
+        <th>ICP</th>
+        <th>Status</th>
+        <th>QA</th>
+        <th>Subject</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in drafts %}
+      <tr class="grade-{{ d.final_grade or 'na' }}">
+        <td>
+          <strong>{{ d.company }}</strong><br>
+          <small class="muted">{{ d.url }}</small>
+        </td>
+        <td><span class="grade">{{ d.final_grade }}</span></td>
+        <td>{{ d.icp_score }}</td>
+        <td>{{ d.status }}</td>
+        <td>{% if d.qa_pass %}<span class="ok">pass</span>{% else %}<span class="bad">block</span>{% endif %}</td>
+        <td><small>{{ d.subject }}</small></td>
+        <td><a href="/prospect/{{ d.prospect_id }}">Review →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

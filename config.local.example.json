@@ -1,0 +1,10 @@
+{
+  "compliance": {
+    "sender_postal_address": "Your Business Name, 123 Main St, Anytown, ST 00000"
+  },
+  "paths": {
+    "master_csv": "C:/path/to/ALL-STATES-MASTER-CLEAN.csv",
+    "xlsx_dir": "C:/path/to/prospect-spreadsheets",
+    "node_prospecting_dir": "C:/path/to/prospecting"
+  }
+}

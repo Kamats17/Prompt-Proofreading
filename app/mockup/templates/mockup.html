@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ short }} mockup</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #F4F2EE; color: #1f2937;
+         font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; }
+  .sheet { width: 1180px; margin: 0 auto; padding: 40px 48px 36px; }
+  .title { font-size: 30px; font-weight: 700; margin: 0 0 4px; }
+  .sub { color: #6b7280; margin: 0 0 28px; font-size: 16px; }
+  .cols { display: flex; gap: 40px; align-items: flex-start; }
+  .col h2 { font-size: 15px; letter-spacing: .08em; text-transform: uppercase; color: #6b7280; margin: 0 0 12px; }
+  .phone { width: 360px; height: 740px; border-radius: 46px; background: #111; padding: 14px;
+           box-shadow: 0 18px 40px rgba(0,0,0,.18); }
+  .screen { width: 100%; height: 100%; border-radius: 34px; overflow: hidden; background: #fff; position: relative; }
+  .screen img.before { width: 100%; display: block; }
+  .bar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px;
+         background: #fff; border-bottom: 1px solid #eee; }
+  .bar .logo { max-height: 38px; max-width: 170px; }
+  .wordmark { font-weight: 800; font-size: 19px; color: {{ color }}; }
+  .bar .call-icon { background: {{ color }}; color: #fff; border-radius: 999px; padding: 8px 14px;
+                    font-weight: 700; font-size: 14px; text-decoration: none; }
+  .hero { background: {{ color }}; color: #fff; padding: 30px 22px 26px; }
+  .hero h1 { font-size: 27px; line-height: 1.15; margin: 0 0 10px; }
+  .hero p { font-size: 15px; line-height: 1.45; margin: 0; opacity: .92; }
+  .ctas { padding: 18px 18px 6px; display: flex; flex-direction: column; gap: 11px; }
+  .btn { display: block; text-align: center; border-radius: 12px; padding: 15px 12px; font-size: 17px;
+         font-weight: 700; text-decoration: none; }
+  .btn.primary { background: {{ color }}; color: #fff; }
+  .btn.secondary { border: 2px solid {{ color }}; color: {{ color }}; background: #fff; }
+  .info { margin: 12px 18px; padding: 14px 16px; font-size: 15px; color: #374151; line-height: 1.7;
+          background: #F7F7F5; border-radius: 12px; }
+  .info strong { color: #111; }
+  .changes { flex: 1; background: #fff; border-radius: 16px; padding: 24px 26px; border: 1px solid #e5e7eb; }
+  .changes h2 { color: {{ color }}; }
+  .changes ol { margin: 0; padding-left: 22px; }
+  .changes li { margin: 0 0 14px; font-size: 16px; line-height: 1.45; }
+  .changes li span { display: block; color: #6b7280; font-size: 14px; }
+  .foot { margin-top: 26px; color: #9ca3af; font-size: 12.5px; }
+  .missing { padding: 40px 24px; color: #9ca3af; text-align: center; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <p class="title">{{ short }}: homepage on a phone</p>
+  <p class="sub">What a customer sees today, and what I'd change{% if city %} · {{ city }}{% endif %}</p>
+  <div class="cols">
+    <div class="col">
+      <h2>Today</h2>
+      <div class="phone"><div class="screen">
+        {% if before_src %}<img class="before" src="{{ before_src }}" alt="current site on a phone">
+        {% else %}<div class="missing">No phone screenshot captured.</div>{% endif %}
+      </div></div>
+    </div>
+    <div class="col" id="proposed">
+      <h2>Proposed</h2>
+      <div class="phone"><div class="screen">
+        <div class="bar">
+          {% if logo_url %}<img class="logo" src="{{ logo_url }}" alt="{{ short }}"
+               onerror="this.style.display='none';document.getElementById('wm').style.display='block'">
+          <span class="wordmark" id="wm" style="display:none">{{ short }}</span>
+          {% else %}<span class="wordmark" id="wm">{{ short }}</span>{% endif %}
+          {% if phone %}<a class="call-icon" href="tel:{{ phone_digits }}">Call</a>{% endif %}
+        </div>
+        <div class="hero">
+          <h1>{{ headline }}</h1>
+          {% if subhead %}<p>{{ subhead }}</p>{% endif %}
+        </div>
+        <div class="ctas">
+          {% for b in buttons %}<a class="btn {{ 'primary' if loop.first else 'secondary' }}" href="#">{{ b }}</a>{% endfor %}
+        </div>
+        {% if info_lines %}<div class="info">{% for line in info_lines %}<strong>{{ line.label }}</strong> {{ line.value }}<br>{% endfor %}</div>{% endif %}
+      </div></div>
+    </div>
+    <div class="changes">
+      <h2>What I'd change</h2>
+      <ol>
+        {% for c in changes %}<li>{{ c.title }}{% if c.why %}<span>{{ c.why }}</span>{% endif %}</li>{% endfor %}
+      </ol>
+    </div>
+  </div>
+  <p class="foot">Concept mockup by {{ studio }}, not your live site. Business name, headline, and phone number are taken from {{ domain }}.</p>
+</div>
+</body>
+</html>

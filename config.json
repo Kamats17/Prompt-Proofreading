@@ -1,0 +1,99 @@
+{
+  "brand": {
+    "company": "PromptProofreading.com",
+    "sender_name": "Chase Kamats",
+    "sender_first_name": "Chase",
+    "sender_email": "CKamats@promptproofreading.com",
+    "site_url": "https://promptproofreading.com",
+    "free_review_url": "https://promptproofreading.com/free-review",
+    "intake_url": "https://promptproofreading.com/website-intake"
+  },
+  "services": [
+    {"key": "website",   "name": "Website Design & Rebuilds",
+     "blurb": "Modern, fast websites that load on the first phone signal and actually convert."},
+    {"key": "appdev",    "name": "App & Web App Development",
+     "blurb": "Custom web apps and tools for the parts of your business spreadsheets cannot fix."},
+    {"key": "content",   "name": "Business Content & English Cleanup",
+     "blurb": "Brochures, listings, manuals, and websites rewritten by humans who get tone."},
+    {"key": "workflow",  "name": "Digital Workflow Improvements",
+     "blurb": "Quotes, intakes, and approvals that still run on email. We fix that."}
+  ],
+  "models": {
+    "audit": "claude-sonnet-5-5",
+    "draft": "claude-sonnet-5-5"
+  },
+  "thresholds": {
+    "icp_min_for_b": 50,
+    "icp_min_for_a": 70,
+    "draft_min_words": 55,
+    "draft_max_words": 105,
+    "followup_min_words": 20,
+    "followup_max_words": 70,
+    "fuzzy_dnc_threshold": 0.85
+  },
+  "subject_by_finding": {
+    "phone_not_tappable": ["{short} phone number", "calling {short} from a phone"],
+    "pdf_menu": ["{short} menu on phones"],
+    "no_https": ["{short} site security warning"],
+    "no_mobile_layout": ["{short} site on a phone"],
+    "third_party_ordering": ["{short} online orders"],
+    "no_order_link": ["{short} online orders"],
+    "no_booking_link": ["booking with {short}"],
+    "typo": ["small typo on the {short} site"],
+    "dead_links": ["{short} site buttons"],
+    "default": ["question about the {short} site", "{short} website"]
+  },
+  "sending": {
+    "daily_new_cap": 20,
+    "followup_business_days": [4, 10],
+    "max_touches": 3,
+    "recontact_window_days": 90
+  },
+  "compliance": {
+    "require_postal_address": true,
+    "sender_postal_address": "",
+    "sender_identity_line": "PromptProofreading.com is a small web studio. This is a one-time business solicitation.",
+    "opt_out_line": "If this isn't useful, reply \"no\" and I won't email again."
+  },
+  "banned_phrases": [
+    "game-changer", "game changer", "synergy", "synergies",
+    "I hope this finds you well", "I hope this email finds you",
+    "I came across your", "I stumbled upon",
+    "love your site", "love your website", "great work on your",
+    "amazing website", "incredible job", "absolutely stunning",
+    "revolutionary", "cutting-edge", "next-generation", "best-in-class",
+    "guaranteed", "we will increase your", "we'll double your",
+    "100% guaranteed", "results guaranteed",
+    "act now", "limited time", "don't miss out", "last chance",
+    "circle back", "touch base", "low-hanging fruit",
+    "leverage", "synergize", "ideate",
+    "quick idea", "costing you", "online presence", "take your business to the next level",
+    "elevate", "skyrocket", "seamless", "unlock", "just following up", "checking in",
+    "bumping this", "I'd love to", "outdated", "unprofessional"
+  ],
+  "fallback_name": "there",
+  "playwright": {
+    "viewport_width": 1280,
+    "viewport_height": 800,
+    "timeout_ms": 20000,
+    "wait_until": "domcontentloaded"
+  },
+  "paths": {
+    "db": "data/pp_agent.db",
+    "cache_dir": "data/cache",
+    "leads_in_dir": "data/leads_in",
+    "gmail_credentials": "auth/credentials.json",
+    "gmail_token": "auth/.gmail_token.json",
+    "gmail_read_token": "auth/.gmail_read_token.json",
+    "exports_dir": "data/exports"
+  },
+  "gmail": {
+    "scope": "https://www.googleapis.com/auth/gmail.compose",
+    "read_scope": "https://www.googleapis.com/auth/gmail.readonly",
+    "user_id": "me"
+  },
+  "dashboard": {
+    "host": "127.0.0.1",
+    "port": 8765
+  }
+}

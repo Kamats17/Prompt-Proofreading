@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}{{ prospect.company }}{% endblock %}
+{% block content %}
+{% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
+{% for w in compliance %}<div class="banner">{{ w }}</div>{% endfor %}
+
+<section class="prospect">
+  <h1>{{ prospect.company }}</h1>
+  <p class="muted">
+    <a href="{{ prospect.url }}" target="_blank" rel="noopener noreferrer">{{ prospect.url }}</a>
+    {% if prospect.industry %} • {{ prospect.industry }}{% endif %}
+    {% if prospect.city %} • {{ prospect.city }}{% endif %}{% if prospect.state %}, {{ prospect.state }}{% endif %}
+  </p>
+  <p>
+    {% if prospect.email %}<strong>Email:</strong> {{ prospect.email }}
+      <small class="muted">({{ prospect.email_source or "?" }})</small>
+    {% else %}<em>no email on file</em>{% endif %}
+    {% if prospect.contact_name %} • <strong>Contact:</strong> {{ prospect.contact_name }}{% endif %}
+    {% if prospect.phone %} • <strong>Phone:</strong> {{ prospect.phone }}{% endif %}
+    • <strong>Source:</strong> {{ prospect.source }}
+  </p>
+  {% if prospect.blocked_reason %}
+    <p class="bad">Blocked: {{ prospect.blocked_reason }}
+      {% if prospect.blocked_reason not in ["dnc", "opted_out"] %}
+      <form method="post" action="/api/prospect/{{ prospect.id }}/unblock" class="inline">
+        <button type="submit">Unblock</button>
+      </form>
+      {% endif %}
+    </p>
+  {% endif %}
+  {% if prospect.last_audit_error %}
+    <p class="warnings">Last audit error ({{ prospect.audit_attempts }} attempt(s)): {{ prospect.last_audit_error }}</p>
+  {% endif %}
+
+  <div class="actions">
+    <form method="post" action="/api/audit/{{ prospect.id }}" class="inline">
+      <button type="submit">Run audit</button>
+    </form>
+    {% if audit and audit.final_grade in ["A", "B"] %}
+    <form method="post" action="/api/draft/from-prospect/{{ prospect.id }}" class="inline">
+      <button type="submit">Generate draft</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/api/prospect/{{ prospect.id }}/email" class="inline">
+      <input type="email" name="email" placeholder="set email manually" required>
+      <button type="submit">Save email</button>
+    </form>
+  </div>
+</section>
+
+{% if audit %}
+<section class="audit">
+  <h2>Audit: grade {{ audit.final_grade }} • score {{ audit.icp_score }}
+    {% if meta.score %}<small class="muted">(site need {{ meta.score.site_need }}, buyer fit {{ meta.score.buyer_fit }})</small>{% endif %}
+  </h2>
+  {% if meta.score and meta.score.reasons %}
+    <p class="muted small">{{ meta.score.reasons | join(" · ") }}</p>
+  {% endif %}
+  <div class="shots">
+    {% if audit.screenshot_path %}<img src="/shot/{{ audit.id }}/desktop" alt="desktop screenshot" style="max-width:640px;">{% endif %}
+    {% if meta.mobile_screenshot_path %}<img class="mobile" src="/shot/{{ audit.id }}/mobile" alt="phone screenshot">{% endif %}
+  </div>
+  {% if meta.ownership %}<p><strong>Ownership:</strong> {{ meta.ownership }}{% if meta.managed_by %} • managed by {{ meta.managed_by }}{% endif %}</p>{% endif %}
+  <p><strong>Offer:</strong> {{ audit.demo_angle }}</p>
+
+  <h3>Verified findings</h3>
+  {% if not issues %}<p class="muted">No verified findings.</p>{% endif %}
+  <ul class="issues">
+    {% for it in issues %}
+    <li>
+      <strong>{{ it.type }}</strong>
+      <span class="conf-tag">{{ it.evidence_kind or it.confidence }}</span>
+      <span class="muted">→ {{ it.service }} • severity {{ it.severity }}</span>
+      {% if it.quote %}<blockquote>"{{ it.quote }}"</blockquote>{% endif %}
+      {% if it.fact_detail %}<blockquote>{{ it.fact_detail }}</blockquote>{% endif %}
+      <p>{{ it.customer_moment or it.why_hurts }}</p>
+      {% if it.fix %}<p class="muted">Fix: {{ it.fix }}</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% if meta.facts %}
+    <details><summary>Machine-checked facts ({{ meta.facts | length }})</summary>
+      <ul class="facts">{% for k, v in meta.facts.items() %}<li><code>{{ k }}</code> {{ v }}</li>{% endfor %}</ul>
+    </details>
+  {% endif %}
+  {% if meta.dropped_findings %}
+    <details><summary>Claims rejected by the fabrication guard ({{ meta.dropped_findings | length }})</summary>
+      <ul class="small">{% for d in meta.dropped_findings %}<li>{{ d.reason }}: <code>{{ d.finding.type }}</code> {{ d.finding.quote or d.finding.fact_id }}</li>{% endfor %}</ul>
+    </details>
+  {% endif %}
+</section>
+{% else %}
+<section class="audit"><p class="muted">No audit run yet.</p></section>
+{% endif %}
+
+{% if audit %}
+<section class="mockup">
+  <h2>Mockup <small class="muted">(for prospects who said yes)</small></h2>
+  <form method="post" action="/api/prospect/{{ prospect.id }}/mockup" class="inline">
+    <button type="submit">{{ "Rebuild mockup" if has_mockup else "Build mockup" }}</button>
+  </form>
+  {% if has_mockup %}
+    <p><img src="/mockup/{{ prospect.id }}/sheet" alt="before/after mockup" style="max-width:100%;border:1px solid #ddd;border-radius:6px;"></p>
+    <form method="post" action="/api/prospect/{{ prospect.id }}/mockup/send">
+      <label>Reply text (the mockup PNG is attached; signature and footer are added automatically)<br>
+        <textarea name="body_text" rows="12" style="width:100%;">{{ mockup_reply }}</textarea></label>
+      <button type="submit" class="primary">Put mockup reply in Gmail Drafts</button>
+    </form>
+  {% endif %}
+</section>
+{% endif %}
+
+{% for d in drafts %}
+<section class="draft">
+  <h2>Draft #{{ d.id }} <span class="muted">(touch {{ d.touch }} • {{ d.status }}{% if d.human_edited %} • edited{% endif %})</span></h2>
+  {% set msgs = d.qa_blockers_json|fromjson %}
+  {% if d.qa_pass %}<p class="ok">QA gate: pass</p>{% else %}<p class="bad">QA gate: blocked</p>{% endif %}
+  {% if msgs %}
+  <ul class="blockers">
+    {% for b in msgs %}<li class="{{ 'warnings' if b.startswith('WARNING') else '' }}">{{ b }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% if d.reject_reason %}<p class="muted">Note: {{ d.reject_reason }}</p>{% endif %}
+
+  {% if d.status in ["pending", "error"] %}
+  <form method="post" action="/api/draft/{{ d.id }}/edit">
+    <label>Subject<br><input type="text" name="subject" value="{{ d.subject }}" style="width: 100%;"></label>
+    <label>Body (plain text — signature and opt-out footer are added automatically)<br>
+      <textarea name="body_text" rows="12" style="width: 100%;">{{ d.body_text }}</textarea></label>
+    <button type="submit">Save edits (re-runs QA)</button>
+  </form>
+  {% else %}
+  <p><strong>Subject:</strong> {{ d.subject }}</p>
+  <div class="preview">{{ d.body_html | safe }}</div>
+  {% endif %}
+
+  <div class="actions">
+    {% if d.status == "pending" %}
+      <form method="post" action="/api/draft/{{ d.id }}/approve" class="inline">
+        <button type="submit" class="primary">Approve → push to Gmail Drafts</button>
+      </form>
+    {% endif %}
+    {% if d.status in ["pending", "error"] %}
+      <form method="post" action="/api/draft/{{ d.id }}/reject" class="inline">
+        <select name="category">{% for c in reject_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select>
+        <input type="text" name="reason" placeholder="note (optional)">
+        <button type="submit">Reject</button>
+      </form>
+      {% if d.touch == 1 %}
+      <form method="post" action="/api/draft/{{ d.id }}/regenerate" class="inline">
+        <button type="submit">Regenerate</button>
+      </form>
+      {% endif %}
+    {% endif %}
+    {% if d.status == "pushed" %}
+      <form method="post" action="/api/draft/{{ d.id }}/mark-sent" class="inline"><button type="submit">Mark as sent</button></form>
+    {% endif %}
+    {% if d.status in ["pushed", "sent"] %}
+      <form method="post" action="/api/draft/{{ d.id }}/mark-replied" class="inline"><button type="submit">Mark as replied</button></form>
+    {% endif %}
+    {% if d.status in ["pushed", "sent", "replied"] %}
+      <form method="post" action="/api/draft/{{ d.id }}/opted-out" class="inline"><button type="submit">They opted out → DNC</button></form>
+    {% endif %}
+    {% if d.gmail_draft_id %}<p class="ok">In Gmail (draft id <code>{{ d.gmail_draft_id }}</code>)</p>{% endif %}
+  </div>
+</section>
+{% endfor %}
+
+<section class="events">
+  <h3>Activity</h3>
+  <ul class="events-list">
+    {% for ev in events %}
+      <li><span class="muted">{{ ev.created_at }}</span> <strong>{{ ev.event_type }}</strong>
+        {% if ev.payload_json %}<code class="muted">{{ ev.payload_json[:400] }}</code>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

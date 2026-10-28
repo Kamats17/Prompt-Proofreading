@@ -1,0 +1,28 @@
+{
+  "issues": [
+    {
+      "type": "outdated_copyright",
+      "quote": "Copyright 2018 Bob's Diner",
+      "confidence": "verified",
+      "why_hurts": "An outdated copyright year suggests the business is inactive or unmaintained.",
+      "service": "website"
+    },
+    {
+      "type": "spelling_or_grammar",
+      "quote": "Call to place a order",
+      "confidence": "verified",
+      "why_hurts": "Grammar errors lower trust on the homepage.",
+      "service": "content"
+    },
+    {
+      "type": "thin_homepage_copy",
+      "quote": "",
+      "confidence": "likely",
+      "why_hurts": "Very short homepage may underperform on search.",
+      "service": "website"
+    }
+  ],
+  "service_angle": "website rebuild with modern visuals and updated copy",
+  "demo_angle": "30-minute walkthrough showing a refreshed homepage and fixes for the dated copyright and grammar errors",
+  "icp_score": 78
+}

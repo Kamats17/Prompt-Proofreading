@@ -1,0 +1,27 @@
+.env
+config.local.json
+auth/credentials.json
+auth/.gmail_token.json
+auth/*.json
+data/pp_agent.db
+data/pp_agent.db-journal
+data/pp_agent.db-wal
+data/pp_agent.db-shm
+data/cache/
+data/leads_in/
+data/exports/
+data/mockups/
+data/logs/
+data/*.db
+data/*.db-*
+data/*.bundle
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+.DS_Store
+node_modules/
+# Not part of this project — a linked worktree of an unrelated repo lives here.
+.claude/

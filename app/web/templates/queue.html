@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Review queue{% endblock %}
+{% block content %}
+{% for w in compliance %}<div class="banner">{{ w }}</div>{% endfor %}
+<section class="filters">
+  <h1>Review queue <small class="muted">({{ items | length }} pending)</small></h1>
+  <p class="cap">New emails pushed today: <strong>{{ pushed_today }}</strong> / {{ daily_cap }}
+    · Keys: <span class="kbd">J</span>/<span class="kbd">K</span> next/previous,
+    <span class="kbd">A</span> approve, <span class="kbd">R</span> reject, <span class="kbd">O</span> open lead</p>
+</section>
+
+{% if not items %}
+  <p class="muted">Nothing to review. Run <code>pp-agent daily</code> to audit and draft more leads.</p>
+{% endif %}
+
+{% for it in items %}
+{% set d = it.draft %}{% set p = it.prospect %}{% set a = it.audit %}
+<section class="card" data-card id="card-{{ loop.index0 }}">
+  <h2><a href="/prospect/{{ p.id }}" data-open>{{ p.company }}</a>
+    <small class="muted">grade {{ a.final_grade }} · score {{ a.icp_score }} · touch {{ d.touch }}
+      · to {{ p.email or "(no email)" }}</small></h2>
+  <div class="two-col">
+    <div>
+      <p><strong>Subject:</strong> {{ d.subject }}</p>
+      <div class="preview">{{ d.body_html | safe }}</div>
+      {% set msgs = d.qa_blockers_json|fromjson %}
+      {% if d.qa_pass %}<p class="ok">QA pass</p>{% else %}<p class="bad">QA blocked</p>{% endif %}
+      {% if msgs %}<ul class="blockers small">{% for b in msgs %}<li class="{{ 'warnings' if b.startswith('WARNING') else '' }}">{{ b }}</li>{% endfor %}</ul>{% endif %}
+      <div class="actions">
+        <form method="post" action="/api/draft/{{ d.id }}/approve" class="inline" data-approve>
+          <button type="submit" class="primary" {% if not d.qa_pass %}disabled{% endif %}>Approve → Gmail</button>
+        </form>
+        <form method="post" action="/api/draft/{{ d.id }}/reject" class="inline">
+          <select name="category" data-reject>{% for c in reject_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select>
+          <button type="submit">Reject</button>
+        </form>
+        <a href="/prospect/{{ p.id }}">Edit…</a>
+        <a href="{{ p.url }}" target="_blank" rel="noopener noreferrer">Live site ↗</a>
+      </div>
+    </div>
+    <div>
+      <div class="shots">
+        {% if a.screenshot_path %}<img src="/shot/{{ a.id }}/desktop" alt="desktop" style="max-width:100%;">{% endif %}
+        {% if it.meta.mobile_screenshot_path %}<img class="mobile" src="/shot/{{ a.id }}/mobile" alt="phone">{% endif %}
+      </div>
+      <ul class="issues small">
+        {% for f in it.issues[:3] %}
+        <li><strong>{{ f.type }}</strong> <span class="conf-tag">{{ f.evidence_kind }}</span>
+          {% if f.quote %}<blockquote>"{{ f.quote }}"</blockquote>{% endif %}
+          {% if f.fact_detail %}<blockquote>{{ f.fact_detail }}</blockquote>{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</section>
+{% endfor %}
+
+<script>
+(function () {
+  const cards = Array.from(document.querySelectorAll('[data-card]'));
+  if (!cards.length) return;
+  let i = 0;
+  function focus(n) {
+    i = Math.max(0, Math.min(cards.length - 1, n));
+    cards.forEach((c, k) => c.classList.toggle('focus', k === i));
+    cards[i].scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+  document.addEventListener('keydown', function (e) {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+    const c = cards[i];
+    if (e.key === 'j') focus(i + 1);
+    else if (e.key === 'k') focus(i - 1);
+    else if (e.key === 'a') { const b = c.querySelector('[data-approve] button'); if (b && !b.disabled) b.click(); }
+    else if (e.key === 'r') { const s = c.querySelector('[data-reject]'); if (s) s.focus(); }
+    else if (e.key === 'o') { const l = c.querySelector('[data-open]'); if (l) l.click(); }
+  });
+  focus(0);
+})();
+</script>
+{% endblock %}
