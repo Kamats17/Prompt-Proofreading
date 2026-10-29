@@ -2,35 +2,70 @@
 import json
 import sqlite3
 from typing import Optional, Iterable
+from urllib.parse import urlparse
 
 from app.db.models import Prospect, Audit, Draft, DncEntry, Event
-from app.sources._normalize import domain_of
+from app.safety.dnc import _normalize_company, _fuzzy_match
+from app.sources._normalize import domain_of, clean_company
 
 
 # ---------- prospects ----------
 
+def _is_homepage(url: str) -> bool:
+    u = urlparse(url or "")
+    return u.path in ("", "/") and not u.query
+
+
+def _same_business(existing: sqlite3.Row, p: Prospect) -> bool:
+    """Two URLs on one domain are the same prospect only when it's clearly one
+    business: the names match, or one of the URLs is that site's homepage.
+    Never merge on the domain alone: multi-tenant hosts (booking, ordering and
+    directory platforms) put many unrelated businesses on a single domain."""
+    a, b = _normalize_company(existing["company"] or ""), _normalize_company(p.company or "")
+    if a and b and _fuzzy_match(a, b):
+        return True
+    return _is_homepage(existing["url"]) or _is_homepage(p.url)
+
+
 def upsert_prospect(conn: sqlite3.Connection, p: Prospect) -> int:
-    """Insert prospect; on URL conflict, update mutable fields and return existing id."""
+    """Insert a prospect, or merge into the existing row for the same business.
+
+    Same business = same URL, or same canonical domain plus `_same_business`, so
+    one site arriving from several lead sources (master CSV `joes.com`, node XLSX
+    `joes.com/home`) stays one prospect instead of being emailed twice.
+
+    Merging only FILLS EMPTY fields. A re-import or a second source never
+    overwrites an existing email, name, or phone: a silently changed address is
+    how an email ends up going to the wrong person."""
     canon = p.canonical_domain or domain_of(p.url)
-    row = conn.execute("SELECT id FROM prospects WHERE url = ?", (p.url,)).fetchone()
+    row = conn.execute("SELECT id, company, url FROM prospects WHERE url = ?", (p.url,)).fetchone()
+    if not row and canon:
+        for cand in conn.execute("SELECT id, company, url FROM prospects WHERE canonical_domain = ? "
+                                 "ORDER BY id", (canon,)).fetchall():
+            if _same_business(cand, p):
+                row = cand
+                break
     if row:
+        # A name derived from the domain ("Joespizza") yields to a real one.
+        placeholder = (row["company"] or "") == clean_company("", row["url"])
         conn.execute(
             """UPDATE prospects
-               SET company = COALESCE(NULLIF(?, ''), company),
-                   canonical_domain = COALESCE(?, canonical_domain),
-                   industry = COALESCE(?, industry),
-                   city = COALESCE(?, city),
-                   state = COALESCE(?, state),
-                   email = COALESCE(?, email),
-                   email_source = COALESCE(?, email_source),
-                   contact_name = COALESCE(?, contact_name),
-                   phone = COALESCE(?, phone),
-                   node_rating = COALESCE(?, node_rating),
-                   node_issues_json = COALESCE(?, node_issues_json),
+               SET company = CASE WHEN ? AND NULLIF(?, '') IS NOT NULL THEN ? ELSE company END,
+                   canonical_domain = COALESCE(canonical_domain, ?),
+                   industry = COALESCE(industry, ?),
+                   city = COALESCE(city, ?),
+                   state = COALESCE(state, ?),
+                   email_source = CASE WHEN email IS NULL OR email = '' THEN ? ELSE email_source END,
+                   email = COALESCE(NULLIF(email, ''), ?),
+                   contact_name = COALESCE(NULLIF(contact_name, ''), ?),
+                   phone = COALESCE(NULLIF(phone, ''), ?),
+                   node_rating = COALESCE(node_rating, ?),
+                   node_issues_json = COALESCE(node_issues_json, ?),
                    updated_at = datetime('now')
                WHERE id = ?""",
-            (p.company, canon, p.industry, p.city, p.state, p.email, p.email_source,
-             p.contact_name, p.phone, p.node_rating, p.node_issues_json, row["id"]),
+            (1 if placeholder else 0, p.company, p.company, canon, p.industry, p.city, p.state,
+             p.email_source, p.email, p.contact_name, p.phone, p.node_rating,
+             p.node_issues_json, row["id"]),
         )
         conn.commit()
         return row["id"]

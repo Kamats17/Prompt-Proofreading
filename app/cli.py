@@ -294,6 +294,11 @@ def cmd_status(args):
     _out("\nBy source:")
     for row in q("SELECT source, COUNT(*) FROM prospects GROUP BY source"):
         _out(f"  {row[0]:<16} {row[1]}")
+    same_site = q("SELECT canonical_domain, COUNT(*) FROM prospects WHERE canonical_domain IS NOT NULL "
+                  "GROUP BY canonical_domain HAVING COUNT(*) > 1")
+    if same_site:
+        _out(f"  !! {len(same_site)} site(s) with more than one prospect - check they're really "
+             f"different businesses: {[r[0] for r in same_site[:5]]}")
     _out("\nBlocked prospects:")
     for row in q("SELECT blocked_reason, COUNT(*) FROM prospects WHERE blocked_reason IS NOT NULL "
                  "GROUP BY blocked_reason ORDER BY 2 DESC"):

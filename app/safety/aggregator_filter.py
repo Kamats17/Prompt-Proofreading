@@ -87,6 +87,25 @@ FRANCHISE_DOMAINS = frozenset({
     "servpro.com", "servicemaster.com", "mollymaid.com",
 })
 
+# Booking, ordering, and listing platforms that host many unrelated businesses
+# on ONE domain (vagaro.com/joesbarber, toasttab.com/tonys-pizza). A page there
+# isn't the business's own site, so it can't be audited, and treating the domain
+# as one business would merge different prospects.
+PLATFORM_DOMAINS = frozenset({
+    # booking
+    "vagaro.com", "booksy.com", "styleseat.com", "schedulicity.com", "mindbodyonline.com",
+    "fresha.com", "glossgenius.com", "getsquire.com", "acuityscheduling.com", "setmore.com",
+    "zocdoc.com", "resy.com", "squareup.com", "booker.com", "genbook.com", "schedulista.com",
+    # ordering / menus
+    "toasttab.com", "chownow.com", "slicelife.com", "menufy.com", "beyondmenu.com",
+    "clover.com", "order.online", "gloriafood.com", "orderonlinemenus.com", "menulog.com",
+    "eatstreet.com", "postmates.com", "menu-world.com",
+    # listings / reviews
+    "nextdoor.com", "alignable.com", "chamberofcommerce.com", "thumbtack.com", "angi.com",
+    "angieslist.com", "houzz.com", "homeadvisor.com", "groupon.com", "superpages.com",
+    "citysearch.com", "hotfrog.com", "merchantcircle.com", "birdeye.com", "porch.com",
+})
+
 # Subdomain-style aggregators where ANY subdomain on the apex is aggregator-hosted.
 # Blocks foo.wixsite.com, mysalon.myshopify.com, and directory sites that
 # auto-generate a "website" per listing (the business never built or owns it).
@@ -145,6 +164,8 @@ def is_aggregator(url: str) -> tuple[bool, str | None]:
         return True, f"aggregator domain: {apex}"
     if apex in FRANCHISE_DOMAINS:
         return True, f"franchise/chain (centrally managed): {apex}"
+    if apex in PLATFORM_DOMAINS:
+        return True, f"booking/ordering/listing platform page: {apex}"
 
     return False, None
 
