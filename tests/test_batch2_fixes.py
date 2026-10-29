@@ -41,9 +41,11 @@ def test_junk_designer_credit_ignored(tmp_path):
 
 
 def _body(n_words: int) -> str:
-    filler = " ".join(["word"] * (n_words - 14))
-    return (f"Hi there,\n\nThe number at the top can't be tapped to call on a phone. {filler}.\n\n"
-            "Want me to send a free mockup?\n\nThanks,\nChase")
+    """A body with exactly n_words words before the sign-off."""
+    head = "Hi there,\n\nThe number at the top can't be tapped to call on a phone."
+    tail = "\n\nWant me to send a free mockup?"
+    pad = n_words - len((head + tail).split())
+    return f"{head} {' '.join(['word'] * pad)}.{tail}\n\nThanks,\nChase"
 
 
 def test_rebuild_emails_get_more_room(conn):

@@ -51,7 +51,9 @@ PLATFORM_MARKERS = {
     "shopify": ("cdn.shopify.com",),
     "webflow": ("webflow.com",),
 }
-_CREDIT_NAME = r"([A-Z][\w&.\-]*(?:\s+[A-Z][\w&.\-]*){0,3})"
+# Capitalized words; a dot is allowed only INSIDE a word (Acme.com), so a credit
+# stops at the end of its sentence instead of running into the next one.
+_CREDIT_NAME = r"([A-Z][\w&\-]*(?:\.[\w&\-]+)*(?:\s+[A-Z][\w&\-]*(?:\.[\w&\-]+)*){0,3})"
 _CREDIT_RE = re.compile(
     r"(?:[Ww]ebsite|[Ss]ite|[Ww]eb)\s*(?:[Dd]esign(?:ed)?|[Bb]uilt|[Dd]eveloped|[Cc]reated|[Mm]ade)?\s*by\s+"
     + _CREDIT_NAME + r"|(?:[Pp]owered|[Dd]esigned|[Hh]osted|[Mm]anaged)\s+by\s+" + _CREDIT_NAME,
@@ -252,7 +254,7 @@ def extract_features(html_path: str | Path, *, base_url: str | None = None) -> d
                 break
             words.append(w)
         credit = " ".join(words).strip(" .-")
-        if len(credit) >= 3 and credit.lower() not in _CREDIT_JUNK:
+        if len(credit) >= 3 and credit.split()[0].lower() not in _CREDIT_JUNK:
             credits.append(credit[:40])
     own_reg = registered_domain(base_url) if base_url else ""
     credit_link_domains = sorted({
