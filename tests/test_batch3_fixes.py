@@ -93,3 +93,25 @@ def test_unmeasured_no_email_lead_gets_no_guessed_talking_point(conn, tmp_path, 
     with open(build_call_list(conn, src, tmp_path)["path"], encoding="utf-8-sig") as f:
         row = next(r for r in csv.DictReader(f) if r["Business"] == "Quiet Diner")
     assert row["Pitch"].endswith("offer a free site review.")
+
+
+def test_batch_runs_until_target_drafts(conn, monkeypatch):
+    import app.cli as cli
+    import app.draft.pipeline as draft_pipeline
+    ids = [upsert_prospect(conn, Prospect(company=f"Biz {i}", url=f"https://biz{i}.com", source="manual"))
+           for i in range(6)]
+    grades = dict(zip(ids, ["C", "B", "C", "A", "B", "B"]))
+
+    def fake_audit(c, pid, stats, **kw):
+        c.execute("INSERT INTO audits (prospect_id, final_grade, icp_score, issues_json) VALUES (?, ?, 50, '[]')",
+                  (pid, grades[pid]))
+        c.commit()
+        stats["audited"] += 1
+        return {"ok": True, "final_grade": grades[pid], "icp_score": 50}, "graded"
+    monkeypatch.setattr(cli, "_audit_one", fake_audit)
+    monkeypatch.setattr(draft_pipeline, "draft_for_prospect",
+                        lambda c, pid, **kw: {"ok": True, "qa_pass": True})
+    st = cli.run_until_drafts(conn, target=2, max_audits=50, quiet=True)
+    assert st["ready"] == 2 and st["tried"] == 4 and st["stopped"] == "target reached"
+    st = cli.run_until_drafts(conn, target=5, max_audits=50, quiet=True)
+    assert st["ready"] == 2 and st["stopped"].startswith("no more leads")   # list ran out

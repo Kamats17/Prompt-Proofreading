@@ -85,12 +85,8 @@ def cmd_ingest(args):
 
 # ---- audit / draft (bulk-safe) ---------------------------------------------------
 
-def run_bulk_audit(conn, *, limit: int, allow_no_email: bool = False,
-                   force_fetch: bool = False, quiet: bool = False) -> dict:
-    """Audit the next `limit` eligible prospects. Never aborts on one bad lead;
-    stops immediately on a Claude login failure."""
-    from app.audit.pipeline import audit_prospect
-    rows = conn.execute(
+def _next_audit_rows(conn, limit: int) -> list:
+    return conn.execute(
         f"""SELECT p.id, p.company FROM prospects p
             WHERE NOT EXISTS (SELECT 1 FROM audits a WHERE a.prospect_id = p.id)
               AND p.blocked_reason IS NULL
@@ -102,29 +98,45 @@ def run_bulk_audit(conn, *, limit: int, allow_no_email: bool = False,
                            WHEN p.contact_name IS NOT NULL AND p.contact_name != '' THEN 1
                            ELSE 2 END), p.audit_attempts, p.id
             LIMIT ?""", (limit,)).fetchall()
+
+
+def _audit_one(conn, pid: int, stats: dict, *, force_fetch: bool = False,
+               allow_no_email: bool = False) -> tuple[dict, str]:
+    """Audit one prospect, tally it into `stats`, return (result, outcome line)."""
+    from app.audit.pipeline import audit_prospect
+    try:
+        res = audit_prospect(conn, pid, force_fetch=force_fetch, allow_no_email=allow_no_email)
+    except Exception as e:  # one bad lead never kills the batch
+        res = {"ok": False, "error": f"{type(e).__name__}: {e}"[:300]}
+        try:
+            from app.db.repo import record_audit_failure
+            record_audit_failure(conn, pid, res["error"])
+        except Exception:
+            pass
+    if res.get("ok"):
+        stats["audited"] += 1
+        stats["grades"][res["final_grade"]] = stats["grades"].get(res["final_grade"], 0) + 1
+        outcome = f"grade {res['final_grade']} (score {res['icp_score']})"
+    elif res.get("blocked"):
+        stats["blocked"] += 1
+        outcome = f"blocked: {res['blocked']} {res.get('reason') or ''}"
+    else:
+        stats["failed"] += 1
+        outcome = f"error: {res.get('error')}"
+    return res, outcome
+
+
+def run_bulk_audit(conn, *, limit: int, allow_no_email: bool = False,
+                   force_fetch: bool = False, quiet: bool = False) -> dict:
+    """Audit the next `limit` eligible prospects. Never aborts on one bad lead;
+    stops immediately on a Claude login failure."""
+    rows = _next_audit_rows(conn, limit)
     stats = {"selected": len(rows), "audited": 0, "blocked": 0, "failed": 0, "grades": {}}
     if not quiet:
         _out(f"auditing {len(rows)} prospect(s)...")
     for r in rows:
-        try:
-            res = audit_prospect(conn, r["id"], force_fetch=force_fetch, allow_no_email=allow_no_email)
-        except Exception as e:  # one bad lead never kills the batch
-            res = {"ok": False, "error": f"{type(e).__name__}: {e}"[:300]}
-            try:
-                from app.db.repo import record_audit_failure
-                record_audit_failure(conn, r["id"], res["error"])
-            except Exception:
-                pass
-        if res.get("ok"):
-            stats["audited"] += 1
-            stats["grades"][res["final_grade"]] = stats["grades"].get(res["final_grade"], 0) + 1
-            outcome = f"grade {res['final_grade']} (score {res['icp_score']})"
-        elif res.get("blocked"):
-            stats["blocked"] += 1
-            outcome = f"blocked: {res['blocked']} {res.get('reason') or ''}"
-        else:
-            stats["failed"] += 1
-            outcome = f"error: {res.get('error')}"
+        res, outcome = _audit_one(conn, r["id"], stats, force_fetch=force_fetch,
+                                  allow_no_email=allow_no_email)
         if not quiet:
             _out(f"  #{r['id']} {r['company']} -> {outcome}"[:220])
         if res.get("error_kind") == "auth":
@@ -173,6 +185,75 @@ def run_bulk_draft(conn, *, grades: tuple[str, ...], limit: int, allow_no_email:
             _out(f"STOPPED: {stats['aborted']}")
             break
     return stats
+
+
+def run_until_drafts(conn, *, target: int, max_audits: int, quiet: bool = False) -> dict:
+    """Keep auditing the next lead and drafting every A/B result until `target`
+    drafts pass QA, the lead list runs out, or `max_audits` leads were tried.
+
+    "Run 15" means 15 emails ready to review, not 15 audits: most leads are
+    blocked (no email, directory page, dead site) or grade C, so the number of
+    audits needed is open-ended. Already-audited A/B leads without a draft are
+    drafted first and count toward the target."""
+    from app.draft.pipeline import draft_for_prospect
+    stats = {"target": target, "ready": 0, "needs_edits": 0, "tried": 0, "audited": 0,
+             "blocked": 0, "failed": 0, "grades": {}, "stopped": ""}
+    left = run_bulk_draft(conn, grades=("A", "B"), limit=target, quiet=True)
+    stats["ready"] += left["qa_pass"]
+    stats["needs_edits"] += left["drafted"] - left["qa_pass"]
+    if left.get("aborted"):
+        stats["stopped"] = left["aborted"]
+        return stats
+    if not quiet and left["drafted"]:
+        _out(f"drafted {left['drafted']} lead(s) audited earlier")
+    while stats["ready"] < target:
+        if stats["tried"] >= max_audits:
+            stats["stopped"] = f"tried {max_audits} leads (raise --max-audits to keep going)"
+            break
+        rows = _next_audit_rows(conn, 1)
+        if not rows:
+            stats["stopped"] = "no more leads to audit: ingest more leads"
+            break
+        r = rows[0]
+        stats["tried"] += 1
+        res, outcome = _audit_one(conn, r["id"], stats)
+        if res.get("error_kind") == "auth":
+            stats["stopped"] = "Claude login expired - run `claude auth login` in a terminal"
+            _out(f"STOPPED: {stats['stopped']}")
+            break
+        if res.get("ok") and res.get("final_grade") in ("A", "B"):
+            try:
+                d = draft_for_prospect(conn, r["id"])
+            except Exception as e:
+                d = {"ok": False, "error": f"{type(e).__name__}: {e}"[:200]}
+            if d.get("ok") and d.get("qa_pass"):
+                stats["ready"] += 1
+                outcome += " -> draft ready"
+            elif d.get("ok"):
+                stats["needs_edits"] += 1
+                outcome += f" -> draft needs edits: {d.get('blockers')}"
+            else:
+                outcome += f" -> not drafted: {d.get('skipped') or d.get('error')}"
+            if d.get("error_kind") == "auth":
+                stats["stopped"] = "Claude login expired - run `claude auth login` in a terminal"
+                _out(f"STOPPED: {stats['stopped']}")
+                break
+        if not quiet:
+            _out(f"  [{stats['ready']}/{target}] #{r['id']} {r['company']} -> {outcome}"[:240])
+    if stats["ready"] >= target:
+        stats["stopped"] = "target reached"
+    return stats
+
+
+def cmd_batch(args):
+    conn = _ensure_db()
+    _out(f"Working until {args.drafts} drafts are ready to review (up to {args.max_audits} leads)...")
+    st = run_until_drafts(conn, target=args.drafts, max_audits=args.max_audits)
+    _out("")
+    _out(f"READY TO REVIEW: {st['ready']} of {st['target']} · needing edits: {st['needs_edits']} "
+         f"· leads tried: {st['tried']} (blocked {st['blocked']}, errors {st['failed']}, "
+         f"grades {st['grades']})")
+    _out(f"Stopped: {st['stopped']}")
 
 
 def cmd_audit(args):
@@ -271,15 +352,12 @@ def cmd_daily(args):
     _out("== 2/4 Follow-ups")
     f = create_followups(conn, limit=args.followups)
     _out(f"   {f}")
-    _out(f"== 3/4 Audit up to {args.audit} new leads")
-    a = run_bulk_audit(conn, limit=args.audit, quiet=not args.verbose)
+    _out(f"== 3/4 Audit + draft until {args.draft} drafts are ready (up to {args.audit} leads)")
+    a = run_until_drafts(conn, target=args.draft, max_audits=args.audit, quiet=not args.verbose)
     _out(f"   {a}")
+    _out("== 4/4 Mockups for replies")
     m = build_pending_mockups(conn, quiet=True)
-    d = {"skipped": "audit stopped"}
-    if not a.get("aborted"):
-        _out(f"== 4/4 Draft up to {args.draft} A/B leads")
-        d = run_bulk_draft(conn, grades=("A", "B"), limit=args.draft, quiet=not args.verbose)
-        _out(f"   {d}")
+    _out(f"   {m}")
     pending = conn.execute("SELECT COUNT(*) FROM drafts WHERE status='pending' AND qa_pass=1").fetchone()[0]
     blocked = conn.execute("SELECT COUNT(*) FROM drafts WHERE status='pending' AND qa_pass=0").fetchone()[0]
     _out("")
@@ -529,10 +607,16 @@ def build_parser() -> argparse.ArgumentParser:
     fu.set_defaults(func=cmd_followups)
     fu.add_argument("--limit", type=int, default=20)
 
-    dly = sub.add_parser("daily", help="sync -> follow-ups -> audit -> draft -> summary")
+    bat = sub.add_parser("batch", help="audit + draft until N drafts are ready to review")
+    bat.set_defaults(func=cmd_batch)
+    bat.add_argument("drafts", type=int, nargs="?", default=15)
+    bat.add_argument("--max-audits", type=int, default=150,
+                     help="stop after trying this many leads even if short of the target")
+
+    dly = sub.add_parser("daily", help="sync -> follow-ups -> audit+draft until N ready -> summary")
     dly.set_defaults(func=cmd_daily)
-    dly.add_argument("--audit", type=int, default=25)
-    dly.add_argument("--draft", type=int, default=15)
+    dly.add_argument("--draft", type=int, default=15, help="drafts ready to review to aim for")
+    dly.add_argument("--audit", type=int, default=150, help="most leads to try")
     dly.add_argument("--followups", type=int, default=20)
     dly.add_argument("--verbose", "-v", action="store_true")
 
