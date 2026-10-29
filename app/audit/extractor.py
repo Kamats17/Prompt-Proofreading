@@ -218,6 +218,16 @@ def extract_features(html_path: str | Path, *, base_url: str | None = None) -> d
     latest_year_mentioned = max(mentioned) if mentioned else None
 
     phones_in_text = sorted(set(m.group(0).strip() for m in _PHONE_RE.finditer(body_text)))[:5]
+    phone_locations: list[str] = []
+    phone_count = 0
+    if phones_in_text:
+        want = re.sub(r"\D", "", phones_in_text[0])[-10:]
+        phone_count = sum(1 for m in _PHONE_RE.finditer(body_text)
+                          if re.sub(r"\D", "", m.group(0))[-10:] == want)
+        for label, tags in (("header", ("header", "nav")), ("footer", ("footer",))):
+            if any(want in re.sub(r"\D", "", el.get_text(" "))
+                   for t in tags for el in soup.find_all(t)):
+                phone_locations.append(label)
 
     hrefs_lower = " ".join(ln["href"].lower() for ln in links) + " " + " ".join(iframe_srcs).lower()
     ordering = sorted({k for k, d in ORDERING_PROVIDERS.items() if d in hrefs_lower})
@@ -282,6 +292,8 @@ def extract_features(html_path: str | Path, *, base_url: str | None = None) -> d
         "page_size_kb": round(len(html) / 1024, 1),
         "html_text_lower": body_text.lower(),
         "phones_in_text": phones_in_text,
+        "phone_locations": phone_locations,
+        "phone_count": phone_count,
         "tel_links": tel_links,
         "dead_links": dead_links,
         "iframe_domains": iframe_domains,
@@ -331,8 +343,13 @@ def compute_facts(features: dict, *, fetch_meta: dict | None = None,
     if (mobile_ok and features.get("phones_in_text") and not features.get("tel_links")
             and not mobile.get("tap_to_call_first_screen")
             and not mobile.get("tel_links_total")):
-        facts["phone_not_tappable"] = (f"The phone number {features['phones_in_text'][0]} is plain "
-                                       "text, so it can't be tapped to call on a phone.")
+        locs = features.get("phone_locations") or []
+        where = ("only in the " + " and the ".join(locs)) if locs else "in the page text"
+        times = features.get("phone_count") or 1
+        facts["phone_not_tappable"] = (
+            f"The phone number {features['phones_in_text'][0]} appears {times} time"
+            f"{'s' if times != 1 else ''} on the homepage, {where}, as plain text, so it can't "
+            "be tapped to call on a phone.")
     if features.get("pdf_menu"):
         facts["pdf_menu"] = "The menu is a PDF download rather than a page that reads well on a phone."
     for prov in features.get("ordering_providers") or []:

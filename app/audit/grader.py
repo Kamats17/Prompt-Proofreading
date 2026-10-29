@@ -1,24 +1,37 @@
 """Lead scoring — computed in code, never by the model.
 
-icp = 0.6 * site_need + 0.4 * buyer_fit   (0-100)
+icp = 0.65 * site_need + 0.35 * buyer_fit   (0-100)
 
   site_need : how much fixable, customer-visible trouble the site has, from the
               severities of findings that PASSED the fabrication guard
-              (sev 3 = +30, sev 2 = +15, sev 1 = +5, capped at 100).
+              (sev 3 = +35, sev 2 = +20, sev 1 = +5, capped at 100).
   buyer_fit : how likely this business is to pay for help (starts at 50):
               +15 higher-ticket industry, +10 signs of an active business,
-              +10 an owner/contact name, -25 site run by an agency or a
-              restaurant platform, -20 no way to contact them, -10 per disqualifier.
+              +10 an owner/contact name, -25 site run on a paid restaurant
+              marketing platform (they already pay someone), -10 a web-designer
+              credit in the footer (a cheap template site is often a GOOD sign),
+              -20 no way to contact them, -10 per OTHER disqualifier.
+
+Each signal counts once: the model's free-text disqualifiers that just restate
+the agency/platform signal the code already measured are not penalized again.
+
+Calibrated on the first live run: an owner-run business with one severe
+customer-facing problem (sev 3) plus a couple of supporting issues lands in B.
 
 Not the business's own site (directory page, franchise) -> Reject outright.
 The Node first-pass rating can still veto (Reject) or cap the grade; a strong
 fresh audit lifts a stale Node 'C' one notch (see `combine`).
 """
+import re
 from typing import Optional
 
 from app.settings import ICP_MIN_FOR_A, ICP_MIN_FOR_B
 
-SEVERITY_POINTS = {3: 30, 2: 15, 1: 5}
+SEVERITY_POINTS = {3: 35, 2: 20, 1: 5}
+NEED_WEIGHT, FIT_WEIGHT = 0.65, 0.35
+_AGENCY_OR_PLATFORM = re.compile(
+    r"(agency|platform|credit|designer|design by|built (?:on|by)|powered by|managed|vendor|"
+    r"popmenu|bentobox|spothopper|owner\.com|website by)", re.IGNORECASE)
 HIGH_TICKET = ("dent", "orthodont", "medical", "clinic", "chiro", "law", "legal", "attorney",
                "hvac", "plumb", "roof", "electric", "contractor", "med spa", "medspa", "auto",
                "veterin", "realt", "insurance", "account", "landscap", "remodel")
@@ -84,19 +97,22 @@ def score_lead(*, findings: list[dict], meta: dict, features: dict,
         fit += 10
         reasons.append("+10 contact/owner name known")
     managed = set(features.get("platforms") or []) & MANAGED_PLATFORMS
-    if features.get("designer_credits") or features.get("credit_link_domains") or managed:
+    if managed:
         fit -= 25
-        reasons.append("-25 site run by an agency/platform")
+        reasons.append(f"-25 runs on a paid restaurant platform ({', '.join(sorted(managed))})")
+    elif features.get("designer_credits") or features.get("credit_link_domains"):
+        fit -= 10
+        reasons.append("-10 web-designer credit in footer")
     if not has_email and not has_phone:
         fit -= 20
         reasons.append("-20 no contact route")
-    n_disq = len(meta.get("disqualifiers") or [])
-    if n_disq:
-        fit -= 10 * n_disq
-        reasons.append(f"-{10 * n_disq} disqualifiers: {meta['disqualifiers']}")
+    other_disq = [d for d in (meta.get("disqualifiers") or []) if not _AGENCY_OR_PLATFORM.search(d)]
+    if other_disq:
+        fit -= 10 * len(other_disq)
+        reasons.append(f"-{10 * len(other_disq)} disqualifiers: {other_disq}")
     fit = max(0, min(100, fit))
 
-    icp = round(0.6 * site_need + 0.4 * fit)
+    icp = round(NEED_WEIGHT * site_need + FIT_WEIGHT * fit)
     if not findings:
         icp = min(icp, ICP_MIN_FOR_B - 1)   # nothing to say -> never draftable
         reasons.append("no verified findings -> capped below B")

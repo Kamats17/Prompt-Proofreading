@@ -180,7 +180,14 @@ def audit_prospect(conn: sqlite3.Connection, prospect_id: int, *,
                      {"error_kind": resp.get("error_kind")}, resp.get("error_kind", "other"))
 
     quote_source = " ".join([page_text_for_quotes(fetched["html_path"]), *extra_texts])
-    kept, dropped = validate_findings(resp["findings"], quote_source_text=quote_source, facts=facts)
+    sources = {  # first match wins: describes where the email may say the quote came from
+        "the page title": features.get("title", ""),
+        "the description that shows up in search results": features.get("meta_description", ""),
+        "the homepage": features.get("body_text", ""),
+        "the contact/about page": " ".join(extra_texts),
+    }
+    kept, dropped = validate_findings(resp["findings"], quote_source_text=quote_source,
+                                      facts=facts, sources=sources)
 
     # Order: the model's primary finding first (if it survived validation), then by severity.
     pf = resp.get("primary_finding_index", 0)

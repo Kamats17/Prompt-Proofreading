@@ -23,8 +23,8 @@
     "draft": "claude-sonnet-5-5"
   },
   "thresholds": {
-    "icp_min_for_b": 50,
-    "icp_min_for_a": 70,
+    "icp_min_for_b": 45,
+    "icp_min_for_a": 65,
     "draft_min_words": 55,
     "draft_max_words": 105,
     "followup_min_words": 20,
@@ -75,7 +75,7 @@
   "playwright": {
     "viewport_width": 1280,
     "viewport_height": 800,
-    "timeout_ms": 20000,
+    "timeout_ms": 30000,
     "wait_until": "domcontentloaded"
   },
   "paths": {

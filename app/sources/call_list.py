@@ -31,6 +31,33 @@ def _pitch(type_: str, listing: str) -> str:
     return f"{where.capitalize()}; offer {offer}."
 
 
+def _no_email_prospects(conn: sqlite3.Connection, seen: set[str]) -> list[dict]:
+    """Prospects with a real website the audit found NO email for (contact form or
+    phone only). The site's verified problems become the call's talking points."""
+    import json
+    from app.mockup.builder import plan_changes
+    rows = conn.execute(
+        """SELECT p.*, (SELECT meta_json FROM audits WHERE prospect_id = p.id
+                        ORDER BY id DESC LIMIT 1) AS meta_json
+           FROM prospects p WHERE p.blocked_reason = 'no_email'""").fetchall()
+    out = []
+    for r in rows:
+        phone = normalize_phone(r["phone"])
+        if not phone or phone in seen or len("".join(ch for ch in phone if ch.isdigit())) != 10:
+            continue
+        if is_dnc(conn, company=r["company"], domain=r["url"]):
+            continue
+        seen.add(phone)
+        facts = (json.loads(r["meta_json"] or "{}") or {}).get("facts", {}) if r["meta_json"] else {}
+        points = [c["title"] for c in plan_changes(facts, [], True)][:2]
+        pitch = ("Has a website but no email listed; " +
+                 ("talk about: " + "; ".join(points) + "." if points else "offer a free site review."))
+        out.append({"Business": r["company"], "Type": r["industry"] or "", "City": r["city"] or "",
+                    "State": r["state"] or "", "Phone": phone, "Listing": r["url"], "Pitch": pitch,
+                    "Source note": "audited site, no email found", "Outcome": "", "Follow-up date": ""})
+    return out
+
+
 def build_call_list(conn: sqlite3.Connection, csv_path: str | Path, out_dir: str | Path) -> dict:
     rows = read_csv_rows(csv_path)
     seen: set[str] = set()
@@ -69,6 +96,7 @@ def build_call_list(conn: sqlite3.Connection, csv_path: str | Path, out_dir: str
             "Source note": (r.get("Missing Feature") or r.get("Notes") or "").strip()[:120],
             "Outcome": "", "Follow-up date": "",
         })
+    out.extend(_no_email_prospects(conn, seen))
     out.sort(key=lambda x: (0 if any(k in x["Type"].lower() for k in PRIORITY_TYPES) else 1,
                             x["State"], x["City"]))
     out_dir = Path(out_dir)

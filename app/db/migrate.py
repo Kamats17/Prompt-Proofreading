@@ -120,6 +120,10 @@ def migrate(db_path: str | Path) -> None:
         conn.execute("COMMIT")
         conn.executescript(schema_text)  # creates any missing tables + base indexes
         _create_dependent_indexes(conn)
+        # Rows imported before email_source existed: label spreadsheet emails so the
+        # review queue can show they weren't found on the business's own site.
+        conn.execute("UPDATE prospects SET email_source = 'csv' WHERE email IS NOT NULL AND email != '' "
+                     "AND email_source IS NULL AND source IN ('master_csv', 'xlsx', 'node_discovery')")
         conn.commit()
         conn.execute("PRAGMA foreign_keys = ON")
     except Exception:

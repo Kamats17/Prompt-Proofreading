@@ -119,11 +119,16 @@ def test_score_lead():
     findings = [{"severity": 3}, {"severity": 2}]
     s = score_lead(findings=findings, meta={"ownership": "own_site", "activity_signals": ["x"]},
                    features={}, industry="Dentist", has_email=True, has_phone=True, contact_name="Mary")
-    assert s["site_need"] == 45 and s["buyer_fit"] == 85 and s["icp"] == 61
+    assert s["site_need"] == 55 and s["buyer_fit"] == 85 and s["icp"] == 66
     agency = score_lead(findings=findings, meta={"ownership": "own_site"},
                         features={"designer_credits": ["Acme Web Co"]}, industry="restaurant",
                         has_email=True, has_phone=True, contact_name=None)
-    assert agency["buyer_fit"] == 25
+    assert agency["buyer_fit"] == 40        # web-designer credit: -10, counted once
+    platform = score_lead(findings=findings, meta={"ownership": "own_site",
+                          "disqualifiers": ["restaurant platform site (SpotHopper)", "slow ordering"]},
+                          features={"platforms": ["spothopper"]}, industry="restaurant",
+                          has_email=True, has_phone=True, contact_name=None)
+    assert platform["buyer_fit"] == 15       # -25 platform, -10 for the one NON-platform disqualifier
     directory = score_lead(findings=findings, meta={"ownership": "directory_or_platform_page"},
                            features={}, industry="x", has_email=True, has_phone=True, contact_name=None)
     assert directory["icp"] == 0 and directory["reject_reason"]
@@ -179,7 +184,7 @@ def test_audit_prospect_end_to_end(conn, tmp_path, monkeypatch):
     assert p.email == "frank@franksdiner.com" and p.email_source == "harvested_own_domain"
     a = latest_audit_for_prospect(conn, pid)
     meta = json.loads(a.meta_json)
-    assert "no_https" in meta["facts"] and meta["score"]["site_need"] == 45
+    assert "no_https" in meta["facts"] and meta["score"]["site_need"] == 55
     payload = json.loads(calls[0]["user"])
     assert payload["business"]["name"] == "Frank's Diner" and "phone_not_tappable" in payload["facts"]
 

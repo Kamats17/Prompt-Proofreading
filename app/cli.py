@@ -14,6 +14,7 @@ Leads:
   ingest manual <urls...> | master-csv | xlsx <path> | xlsx-dir [<dir>] | node-discovery ...
   call-list [--path CSV]          phone list of businesses with NO website (manual calls)
   mockup [<id>] [--limit N]       before/after phone mockup (default: everyone who replied)
+  rescore                         re-grade existing audits after scoring changes (no Claude call)
   dnc add --domain/--email/--company [--reason] | dnc list
 
 Setup & reports:
@@ -227,6 +228,14 @@ def build_pending_mockups(conn, *, limit: int = 20, quiet: bool = False) -> dict
         if not quiet:
             _out(f"  #{r['id']} {r['company']} -> {res.get('png_path') or res.get('error')}")
     return stats
+
+
+def cmd_rescore(args):
+    from app.audit.rescore import rescore_audits
+    for c in rescore_audits(_ensure_db()):
+        flag = "  CHANGED" if c["old"] != c["new"] else ""
+        _out(f"#{c['prospect_id']} {c['company'][:34]:<34} {c['old'][0]}/{c['old'][1]} -> "
+             f"{c['new'][0]}/{c['new'][1]}{flag}")
 
 
 def cmd_mockup(args):
@@ -526,6 +535,9 @@ def build_parser() -> argparse.ArgumentParser:
     dly.add_argument("--draft", type=int, default=15)
     dly.add_argument("--followups", type=int, default=20)
     dly.add_argument("--verbose", "-v", action="store_true")
+
+    sub.add_parser("rescore", help="re-grade existing audits from saved evidence (no Claude call)"
+                   ).set_defaults(func=cmd_rescore)
 
     mk = sub.add_parser("mockup", help="before/after phone mockup (one prospect, or all replies)")
     mk.set_defaults(func=cmd_mockup)

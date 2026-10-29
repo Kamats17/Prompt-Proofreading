@@ -18,7 +18,11 @@
 <section class="card" data-card id="card-{{ loop.index0 }}">
   <h2><a href="/prospect/{{ p.id }}" data-open>{{ p.company }}</a>
     <small class="muted">grade {{ a.final_grade }} · score {{ a.icp_score }} · touch {{ d.touch }}
-      · to {{ p.email or "(no email)" }}</small></h2>
+      · to {{ p.email or "(no email)" }}
+      {% if p.email %}({{ {"harvested_own_domain": "found on their site",
+                           "harvested_free_mail": "found on their site",
+                           "csv": "from your lead spreadsheet, not seen on their site",
+                           "manual": "entered by you"}.get(p.email_source, "source unknown") }}){% endif %}</small></h2>
   <div class="two-col">
     <div>
       <p><strong>Subject:</strong> {{ d.subject }}</p>

@@ -111,7 +111,8 @@ def _regional_variant(word: str, corr_words: list[str]) -> bool:
 
 
 def validate_findings(findings: list[dict], *, quote_source_text: str,
-                      facts: dict[str, str]) -> tuple[list[dict], list[dict]]:
+                      facts: dict[str, str],
+                      sources: dict[str, str] | None = None) -> tuple[list[dict], list[dict]]:
     """Return (kept, dropped). Kept findings get confidence='verified'."""
     kept: list[dict] = []
     dropped: list[dict] = []
@@ -160,7 +161,9 @@ def validate_findings(findings: list[dict], *, quote_source_text: str,
                 if why_not:
                     drop(f, why_not)
                     continue
-            f = {**f, "quote": quote, "fact_id": ""}
+            location = next((name for name, text in (sources or {}).items()
+                             if text and contains_verbatim(text, quote)), "")
+            f = {**f, "quote": quote, "fact_id": "", "quote_location": location}
         else:
             drop(f, f"invalid evidence_kind {kind!r}")
             continue

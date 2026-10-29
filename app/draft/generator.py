@@ -25,7 +25,7 @@ SYSTEM_PROMPT = f"""You write the first cold email from {SENDER_FIRST_NAME}, who
 
 INPUT (JSON): business_name, short_name, industry, city, greeting_name, subject (already chosen; it names the primary finding), primary_finding, second_finding (optional), personal_detail (optional), demo_offer.
 Each finding has evidence_kind:
-- "quote": you may put the quote, or a shorter contiguous part of it, in straight double quotes "like this", copied character for character. Never fix its spelling, capitals, or punctuation.
+- "quote": you may put the quote, or a shorter contiguous part of it, in straight double quotes "like this", copied character for character. Never fix its spelling, capitals, or punctuation. Refer to where it came from using quote_location exactly (e.g. "your homepage says", "the description that shows up in search results says"); never call it Google's text or anything else.
 - "fact": describe it in your own words using customer_moment. Never put it in quotation marks.
 Use no other quotation marks of any kind, including single quotes for emphasis or paraphrase.
 
@@ -40,6 +40,7 @@ Thanks,
 {SENDER_FIRST_NAME}
 
 RULES
+- Use only details the input states. Never add where something is on the page (header, footer, top, menu bar), how often it appears, or how long it has been that way, unless fact_detail or quote_location says so.
 - Don't claim impact you can't see: no "costing you customers/leads", no numbers, no rankings, no "studies show". "may make it harder to..." at most once.
 - Don't call anything outdated, broken, ugly, old, unprofessional, or bad. Describe what happens.
 - No compliments, flattery, urgency, guarantees, apologies for reaching out, "I hope", "just", or "quick idea".
@@ -152,8 +153,8 @@ def _call_and_parse(system: str, payload: dict) -> dict:
 def _finding_for_prompt(f: Optional[dict]) -> Optional[dict]:
     if not f:
         return None
-    return {k: f.get(k, "") for k in ("type", "evidence_kind", "quote", "fact_id", "fact_detail",
-                                       "error_text", "correction", "customer_moment", "fix")}
+    return {k: f.get(k, "") for k in ("type", "evidence_kind", "quote", "quote_location", "fact_id",
+                                       "fact_detail", "error_text", "correction", "customer_moment", "fix")}
 
 
 def generate_draft(*, company: str, short: str, industry: Optional[str], city: Optional[str],
