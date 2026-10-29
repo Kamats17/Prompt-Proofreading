@@ -2,7 +2,7 @@
 each duplicate the message-pump logic.
 
 Auth: uses the local Claude Code CLI session (your Max subscription). No API key
-required. The `claude` binary must be on PATH and logged in (`claude login`).
+required. The `claude` binary must be on PATH and logged in (`claude auth login`).
 
 Returns the concatenated assistant text. Calls are sync from the caller's POV
 (we run the async generator inside `asyncio.run`).
@@ -134,7 +134,7 @@ def probe(model: Optional[str] = None) -> tuple[bool, str]:
         out = call_claude(system="Reply with exactly: OK", user="ping", model=model)
         return ("OK" in out.upper(), out.strip()[:80] or "(empty reply)")
     except ClaudeCallError as e:
-        hint = " -> run `claude login` in a terminal" if e.kind == "auth" else ""
+        hint = " -> run `claude auth login` in a terminal" if e.kind == "auth" else ""
         return False, f"[{e.kind}] {' '.join(str(e).split())[:200]}{hint}"
     except Exception as e:  # pragma: no cover - defensive
         return False, f"{type(e).__name__}: {str(e)[:200]}"

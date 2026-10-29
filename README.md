@@ -31,7 +31,7 @@ python -m venv .venv
 pip install -e .[dev]
 playwright install chromium
 copy config.local.example.json config.local.json   # your postal address + local lead-file paths (git-ignored)
-claude login                 # the agent uses your Claude subscription through the local claude CLI
+claude auth login               # the agent uses your Claude subscription through the local claude CLI
 pp-agent gmail-auth          # compose token: lets it create drafts
 pp-agent gmail-auth --read   # read-only token: lets `sync` see sends, replies, and opt-outs
 pp-agent init
@@ -117,7 +117,7 @@ Every email includes a plain solicitation notice, an opt-out line, and the sende
 
 | Symptom | Fix |
 |---|---|
-| `STOPPED: Claude login expired` / doctor shows `claude login+model FAIL [auth]` | Run `claude login` in a terminal. The desktop app's login is separate from the CLI's. |
+| `STOPPED: Claude login expired` / doctor shows `claude login+model FAIL [auth]` | Run `claude auth login` in a terminal. The desktop app's login is separate from the CLI's. |
 | Approve says "Gmail login expired" | `pp-agent gmail-auth` (and `--read` for sync) |
 | A good lead shows `blocked: ...` | Open it in the dashboard to see the reason. Use **Unblock** for anything except DNC/opt-out. |
 | A lead keeps failing to audit | `status` shows the count. The prospect page shows the last error. Retries are automatic after 24h, up to 3 times. |

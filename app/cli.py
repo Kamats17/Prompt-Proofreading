@@ -127,7 +127,7 @@ def run_bulk_audit(conn, *, limit: int, allow_no_email: bool = False,
         if not quiet:
             _out(f"  #{r['id']} {r['company']} -> {outcome}"[:220])
         if res.get("error_kind") == "auth":
-            stats["aborted"] = "Claude login expired - run `claude login` in a terminal"
+            stats["aborted"] = "Claude login expired - run `claude auth login` in a terminal"
             _out(f"STOPPED: {stats['aborted']}")
             break
     return stats
@@ -168,7 +168,7 @@ def run_bulk_draft(conn, *, grades: tuple[str, ...], limit: int, allow_no_email:
         if not quiet:
             _out(f"  #{r['id']} {r['company']} -> {outcome}"[:220])
         if res.get("error_kind") == "auth":
-            stats["aborted"] = "Claude login expired - run `claude login` in a terminal"
+            stats["aborted"] = "Claude login expired - run `claude auth login` in a terminal"
             _out(f"STOPPED: {stats['aborted']}")
             break
     return stats
