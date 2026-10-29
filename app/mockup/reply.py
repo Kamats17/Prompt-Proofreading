@@ -17,7 +17,7 @@ from app.audit.grader import rebuild_case
 from app.draft.generator import to_html_body
 from app.draft.gmail_client import create_gmail_draft
 from app.draft.pipeline import resolve_greeting
-from app.draft.voice import short_name
+from app.draft.voice import short_name, possessive
 from app.mockup.builder import mockup_paths, plan_changes
 from app.safety.dnc import is_dnc
 from app.settings import SENDER_FIRST_NAME
@@ -52,7 +52,7 @@ def default_reply_text(conn: sqlite3.Connection, prospect_id: int,
         bigger = ("If a fresh site makes more sense than patching this one, I can bring a rough "
                   "quote for a full rebuild to the call too.\n\n")
     return (f"Hi {greeting},\n\n"
-            f"Here's the mockup I mentioned. On the left is {short_name(p.company)}'s homepage on a "
+            f"Here's the mockup I mentioned. On the left is {possessive(short_name(p.company))} homepage on a "
             f"phone today, and on the right is what I'd change:\n\n{bullets}\n\n{bigger}"
             f"Happy to walk you through it in 10 minutes. Would {d1} or {d2} work?\n\n"
             f"Thanks,\n{SENDER_FIRST_NAME}")

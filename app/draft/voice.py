@@ -96,6 +96,14 @@ def short_name(company: str) -> str:
     return " ".join(words[:3])
 
 
+def possessive(name: str) -> str:
+    """Jethro's -> Jethro's (already possessive); Bob -> Bob's; Collins -> Collins'."""
+    n = (name or "").strip()
+    if n.lower().endswith(("'s", "’s")):
+        return n
+    return n + ("'" if n.lower().endswith("s") else "'s")
+
+
 def subject_templates(finding_type: str | None) -> list[str]:
     return SUBJECT_BY_FINDING.get(finding_type or "", []) or SUBJECT_BY_FINDING["default"]
 

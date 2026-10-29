@@ -191,3 +191,10 @@ def test_dashboard_mockup_routes(env, monkeypatch):
     monkeypatch.setattr(reply, "create_gmail_draft", lambda **kw: {"success": True, "draft_id": "g1"})
     r = client.post(f"/api/prospect/{pid}/mockup/send", data={"body_text": "Hi there"}, follow_redirects=False)
     assert "Gmail%20Drafts" in r.headers["location"]
+
+
+def test_possessive_names():
+    from app.draft.voice import possessive
+    assert possessive("Jethro's") == "Jethro's"
+    assert possessive("Bob") == "Bob's"
+    assert possessive("Collins") == "Collins'"
