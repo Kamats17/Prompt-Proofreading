@@ -20,3 +20,11 @@ def test_placeholder_address_never_rendered(monkeypatch):
 def test_real_address_rendered(monkeypatch):
     monkeypatch.setattr(voice, "SENDER_POSTAL_ADDRESS", "PO Box 1, Pittsburgh, PA")
     assert "PO Box 1, Pittsburgh, PA" in voice.render_signature_html()
+
+
+def test_title_line(monkeypatch):
+    monkeypatch.setattr(voice, "SENDER_TITLE", "Founder")
+    first = voice.render_signature_html(first_touch=True)
+    assert "Founder, PromptProofreading.com" in first and "href=\"http" not in first  # no web link on touch 1
+    assert "Founder, <a href=" in voice.render_signature_html(first_touch=False)
+    assert "Founder, PromptProofreading.com" in voice.render_footer_text()

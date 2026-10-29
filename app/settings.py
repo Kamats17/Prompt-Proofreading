@@ -34,6 +34,8 @@ if LOCAL_CONFIG_PATH.exists():
 BRAND = _CFG["brand"]
 SENDER_NAME = BRAND["sender_name"]
 SENDER_FIRST_NAME = BRAND["sender_first_name"]
+SENDER_TITLE = BRAND.get("sender_title", "")
+COMPANY = BRAND["company"]
 SENDER_EMAIL = BRAND["sender_email"]
 SITE_URL = BRAND["site_url"]
 FREE_REVIEW_URL = BRAND["free_review_url"]

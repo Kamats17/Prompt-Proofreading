@@ -8,7 +8,7 @@ import re
 
 from app.settings import (
     BANNED_PHRASES, FALLBACK_NAME, SUBJECT_BY_FINDING,
-    SENDER_NAME, SENDER_FIRST_NAME, SENDER_EMAIL, SITE_URL, SERVICES,
+    SENDER_NAME, SENDER_FIRST_NAME, SENDER_TITLE, COMPANY, SENDER_EMAIL, SITE_URL, SERVICES,
     SENDER_POSTAL_ADDRESS, SENDER_IDENTITY_LINE, OPT_OUT_LINE, REQUIRE_POSTAL_ADDRESS,
 )
 
@@ -184,9 +184,15 @@ def compliance_blockers() -> list[str]:
 def render_signature_html(*, first_touch: bool = True) -> str:
     """HTML signature + footer. First touch carries no website link (one fewer link
     in a cold email is better for deliverability); follow-ups add it."""
-    parts = [f"<p>Thanks,<br>{html.escape(SENDER_FIRST_NAME)}<br>"]
-    if not first_touch:
-        parts.append(f"<a href=\"{SITE_URL}\">{html.escape(SENDER_NAME)} • PromptProofreading.com</a><br>")
+    if SENDER_TITLE:
+        company = (html.escape(COMPANY) if first_touch
+                   else f"<a href=\"{SITE_URL}\">{html.escape(COMPANY)}</a>")
+        parts = [f"<p>Thanks,<br>{html.escape(SENDER_NAME)}<br>"
+                 f"{html.escape(SENDER_TITLE)}, {company}<br>"]
+    else:
+        parts = [f"<p>Thanks,<br>{html.escape(SENDER_FIRST_NAME)}<br>"]
+        if not first_touch:
+            parts.append(f"<a href=\"{SITE_URL}\">{html.escape(SENDER_NAME)} • {html.escape(COMPANY)}</a><br>")
     parts.append(f"<a href=\"mailto:{SENDER_EMAIL}\">{SENDER_EMAIL}</a></p>")
     lines = footer_lines()
     if lines:
@@ -198,7 +204,8 @@ def render_signature_html(*, first_touch: bool = True) -> str:
 def render_footer_text() -> str:
     """Plain-text counterpart appended to the text/plain MIME part."""
     lines = footer_lines()
-    return ("\n\n--\n" + SENDER_EMAIL + "\n" + "\n".join(lines)) if lines else ""
+    who = f"{SENDER_NAME}\n{SENDER_TITLE}, {COMPANY}\n" if SENDER_TITLE else ""
+    return ("\n\n--\n" + who + SENDER_EMAIL + "\n" + "\n".join(lines)) if lines else ""
 
 
 def services_summary() -> str:
