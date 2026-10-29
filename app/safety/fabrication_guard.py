@@ -22,7 +22,7 @@ from app.textnorm import normalize_text, contains_verbatim
 FACT_REQUIRED = {
     "phone_not_tappable": ("phone_not_tappable",),
     "pdf_menu": ("pdf_menu",),
-    "no_https": ("no_https", "cert_expired", "cert_expiring_soon"),
+    "no_https": ("no_https", "cert_expired", "cert_invalid", "cert_expiring_soon"),
     "no_mobile_layout": ("desktop_layout_on_phone", "no_viewport_meta",
                          "mobile_horizontal_scroll", "small_text_mobile"),
     "third_party_ordering": ("third_party_ordering:",),

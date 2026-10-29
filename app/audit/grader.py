@@ -41,7 +41,8 @@ MANAGED_PLATFORMS = {"popmenu", "bentobox", "owner_com", "spothopper"}
 # ---- when is a full rebuild worth mentioning? ------------------------------------
 # Strong: the site itself is built in a dated way. Moderate: fixable, but adds up.
 REBUILD_STRONG = ("desktop_layout_on_phone", "no_viewport_meta", "mobile_horizontal_scroll",
-                  "no_https", "cert_expired", "heavy_page_mobile", "slow_main_content")
+                  "no_https", "cert_expired", "cert_invalid", "heavy_page_mobile",
+                  "slow_main_content")
 REBUILD_MODERATE = ("stale_copyright", "pdf_menu", "phone_not_tappable", "small_text_mobile",
                     "dead_links:", "no_order_link_found", "no_booking_link_found")
 REBUILD_DATED = REBUILD_STRONG + ("stale_copyright",)

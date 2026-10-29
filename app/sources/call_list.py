@@ -31,6 +31,35 @@ def _pitch(type_: str, listing: str) -> str:
     return f"{where.capitalize()}; offer {offer}."
 
 
+_NOTES = {"no_email": "audited site, no email found",
+          "domain_dead": "website address no longer exists",
+          "deadsite": "website shows a parked/placeholder page",
+          "redirect_offsite": "website address forwards to another site"}
+
+
+def _cached_facts(url: str, industry: str | None) -> dict:
+    """Facts from the page already fetched during the audit (local, no Claude).
+    No-email leads are parked before facts are stored, so recompute them here."""
+    import json
+    from app.audit.extractor import compute_facts, extract_features
+    from app.audit.fetcher import _cache_dir_for, _result_from_meta
+    cache = _cache_dir_for(url)
+    meta_path, html = cache / "meta.json", cache / "page.html"
+    if not (meta_path.exists() and html.exists()):
+        return {}
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not meta.get("ok"):
+        return {}
+    features = extract_features(html, base_url=meta.get("final_url") or url)
+    if not features.get("ok", True):
+        return {}
+    return compute_facts(features, fetch_meta=_result_from_meta(meta, cache, cached=True),
+                         industry=industry)
+
+
 def _no_email_prospects(conn: sqlite3.Connection, seen: set[str]) -> list[dict]:
     """Prospects with a real website the audit found NO email for (contact form or
     phone only). The site's verified problems become the call's talking points."""
@@ -39,7 +68,8 @@ def _no_email_prospects(conn: sqlite3.Connection, seen: set[str]) -> list[dict]:
     rows = conn.execute(
         """SELECT p.*, (SELECT meta_json FROM audits WHERE prospect_id = p.id
                         ORDER BY id DESC LIMIT 1) AS meta_json
-           FROM prospects p WHERE p.blocked_reason IN ('no_email', 'domain_dead')""").fetchall()
+           FROM prospects p WHERE p.blocked_reason IN ('no_email', 'domain_dead', 'deadsite',
+                                                        'redirect_offsite')""").fetchall()
     out = []
     for r in rows:
         phone = normalize_phone(r["phone"])
@@ -49,17 +79,26 @@ def _no_email_prospects(conn: sqlite3.Connection, seen: set[str]) -> list[dict]:
             continue
         seen.add(phone)
         facts = (json.loads(r["meta_json"] or "{}") or {}).get("facts", {}) if r["meta_json"] else {}
-        points = [c["title"] for c in plan_changes(facts, [], True)][:2]
-        if r["blocked_reason"] == "domain_dead":
+        if not facts and r["blocked_reason"] == "no_email":
+            facts = _cached_facts(r["url"], r["industry"])
+        # Only measured problems become talking points; never a generic guess.
+        points = [c["title"] for c in plan_changes(facts, [], False)][:2]
+        reason = r["blocked_reason"]
+        if reason == "domain_dead":
             pitch = (f"Their website address ({r['url']}) no longer works; customers who search for "
                      "them hit a dead link. Offer a new site.")
+        elif reason == "deadsite":
+            pitch = (f"Their website address ({r['url']}) shows a parked or placeholder page, not "
+                     "their business. Offer a new site.")
+        elif reason == "redirect_offsite":
+            pitch = (f"Their website address ({r['url']}) forwards visitors to a different site, "
+                     "not one of their own. Offer a site of their own.")
         else:
             pitch = ("Has a website but no email listed; " +
                      ("talk about: " + "; ".join(points) + "." if points else "offer a free site review."))
         out.append({"Business": r["company"], "Type": r["industry"] or "", "City": r["city"] or "",
                     "State": r["state"] or "", "Phone": phone, "Listing": r["url"], "Pitch": pitch,
-                    "Source note": ("website address no longer exists" if r["blocked_reason"] == "domain_dead"
-                                    else "audited site, no email found"),
+                    "Source note": _NOTES[reason],
                     "Outcome": "", "Follow-up date": ""})
     return out
 

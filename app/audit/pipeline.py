@@ -60,6 +60,56 @@ def _fail(conn, pid: int, error: str, event: str, detail: dict | None = None,
     return {"ok": False, "error": error, "error_kind": error_kind}
 
 
+# Problems the code measured itself. The model sometimes leaves one out (it once
+# skipped a non-tappable phone number and the lead scored C), so any of these
+# facts no kept finding already cites is added as a finding by code.
+# fact_id: (type, severity, service, customer_moment, fix)
+_FACT_FINDINGS = {
+    "cert_expired": ("no_https", 3, "website",
+                     "A customer who opens the site gets a full-page browser security warning "
+                     "before they see anything.",
+                     "Renew the security certificate and set it to renew automatically."),
+    "cert_invalid": ("no_https", 3, "website",
+                     "A customer who opens the site gets a full-page browser security warning "
+                     "before they see anything.",
+                     "Install a valid security certificate and set it to renew automatically."),
+    "phone_not_tappable": ("phone_not_tappable", 3, "website",
+                           "On a phone, a customer can't tap the number to call; they have to "
+                           "copy it by hand.",
+                           "Make the phone number a tap-to-call link and add a call button near the top."),
+    "desktop_layout_on_phone": ("no_mobile_layout", 2, "website",
+                                "On a phone, a customer has to pinch and zoom to read the page.",
+                                "Rebuild the layout so it fits a phone screen."),
+    "pdf_menu": ("pdf_menu", 2, "website",
+                 "On a phone, tapping the menu downloads a PDF instead of opening a page.",
+                 "Put the menu on a mobile-friendly web page and keep the PDF for printing."),
+    "no_https": ("no_https", 2, "website",
+                 "The browser marks the site 'Not secure' when a customer opens it.",
+                 "Add a security certificate so the site loads over https."),
+}
+
+
+def missing_fact_findings(kept: list[dict], facts: dict[str, str]) -> list[dict]:
+    """Findings for measured facts no kept finding covers. Also retypes, in place,
+    a kept 'other' finding that cites one of these facts, so the subject line and
+    the draft prompt see what it really is."""
+    for f in kept:
+        if f.get("type") == "other" and f.get("fact_id") in _FACT_FINDINGS:
+            f["type"] = _FACT_FINDINGS[f["fact_id"]][0]
+    cited = {f.get("fact_id") for f in kept}
+    cited_types = {f.get("type") for f in kept}
+    out = []
+    for fid, (ftype, sev, svc, moment, fix) in _FACT_FINDINGS.items():
+        if fid not in facts or fid in cited or ftype in cited_types:
+            continue
+        cited_types.add(ftype)
+        out.append({"type": ftype, "evidence_kind": "fact", "quote": "", "fact_id": fid,
+                    "error_text": "", "correction": "", "customer_moment": moment, "fix": fix,
+                    "service": svc, "severity": sev, "fact_detail": facts[fid],
+                    "confidence": "verified", "why_hurts": moment, "added_by": "code"})
+    return out
+
+
 def _extra_texts(paths: list[str]) -> list[str]:
     out = []
     for p in paths:
@@ -193,6 +243,7 @@ def audit_prospect(conn: sqlite3.Connection, prospect_id: int, *,
     }
     kept, dropped = validate_findings(resp["findings"], quote_source_text=quote_source,
                                       facts=facts, sources=sources)
+    kept += missing_fact_findings(kept, facts)
 
     # Order: the model's primary finding first (if it survived validation), then by severity.
     pf = resp.get("primary_finding_index", 0)

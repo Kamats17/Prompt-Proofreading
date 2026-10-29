@@ -20,6 +20,7 @@ from app.sources._normalize import domain_of, registered_domain, split_emails
 from app.textnorm import normalize_text, contains_verbatim
 
 _PHONE_RE = re.compile(r"(?<!\d)(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}(?!\d)")
+_FAX_BEFORE = re.compile(r"\bfax\b", re.I)
 _YEAR_RE = re.compile(r"(?<!\d)(20\d{2})(?!\d)")
 
 ORDERING_PROVIDERS = {
@@ -221,7 +222,11 @@ def extract_features(html_path: str | Path, *, base_url: str | None = None) -> d
     mentioned = [int(y) for y in _YEAR_RE.findall(body_text) if int(y) <= ty + 1]
     latest_year_mentioned = max(mentioned) if mentioned else None
 
-    phones_in_text = sorted(set(m.group(0).strip() for m in _PHONE_RE.finditer(body_text)))[:5]
+    # In page order, skipping fax numbers ("Tel: ... Fax: 888-...") so the phone
+    # fact never tells an owner their fax line can't be tapped.
+    phones_in_text = list(dict.fromkeys(
+        m.group(0).strip() for m in _PHONE_RE.finditer(body_text)
+        if not _FAX_BEFORE.search(body_text[max(0, m.start() - 16):m.start()])))[:5]
     phone_locations: list[str] = []
     phone_count = 0
     if phones_in_text:
@@ -301,6 +306,7 @@ def extract_features(html_path: str | Path, *, base_url: str | None = None) -> d
         "tel_links": tel_links,
         "dead_links": dead_links,
         "iframe_domains": iframe_domains,
+        "park_script": next((m for m in _PARKING_SCRIPTS if m in html_lower), ""),
         "ordering_providers": ordering,
         "booking_providers": booking,
         "pdf_menu": pdf_menu,
@@ -398,6 +404,10 @@ def compute_facts(features: dict, *, fetch_meta: dict | None = None,
     if cert.get("expired"):
         facts["cert_expired"] = ("The site's security certificate has expired, so browsers show "
                                  "a full-page warning before the site loads.")
+    elif fm.get("cert_ignored") and "expired" in cert:
+        # The browser refused the certificate and the TLS check confirms it.
+        facts["cert_invalid"] = ("The site's security certificate isn't valid, so browsers show "
+                                 "a full-page warning before the site loads.")
     elif cert.get("days_left") is not None and 0 <= cert["days_left"] <= 14 and fm.get("https_ok"):
         facts["cert_expiring_soon"] = (f"The site's security certificate expires in "
                                        f"{cert['days_left']} days.")
@@ -475,6 +485,9 @@ _PARKED_MARKERS = (
     "parked free", "sedoparking", "hugedomains", "domain parking", "index of /",
     "site not found", "website coming soon", "site coming soon", "under construction",
 )
+# Domain-parking ad networks load these scripts on a near-empty page.
+_PARKING_SCRIPTS = ("sk-park.php", "parkingcrew.net", "bodis.com/", "sedoparking.com",
+                    "parklogic.com", "above.com/marketplace")
 # Multi-word or unambiguous markers only — a single common word ("judi", "toto")
 # could be an owner's name ("Judi's Diner").
 _SPAM_MARKERS = (
@@ -503,6 +516,8 @@ def dead_site_reason(features: dict) -> tuple[str | None, bool]:
     for marker in _PARKED_MARKERS:
         if marker in head_text or (body_len < 1500 and marker in body_lower):
             return f"parked/placeholder marker: {marker!r}", True
+    if features.get("park_script") and body_len < 1500:
+        return f"parked domain (parking script {features['park_script']!r})", True
     if body_len < 300:
         return f"thin page ({body_len} chars of visible text)", False
     return None, False

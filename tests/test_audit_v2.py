@@ -179,12 +179,14 @@ def test_audit_prospect_end_to_end(conn, tmp_path, monkeypatch):
                                          source="manual", industry="restaurant", phone="(555) 201-7788"))
     res = audit_pipeline.audit_prospect(conn, pid)
     assert res["ok"], res
-    assert res["issues_kept"] == 2 and res["issues_dropped"] == 1   # invented quote dropped
+    assert res["issues_dropped"] == 1                                # invented quote dropped
     p = get_prospect(conn, pid)
     assert p.email == "frank@franksdiner.com" and p.email_source == "harvested_own_domain"
     a = latest_audit_for_prospect(conn, pid)
     meta = json.loads(a.meta_json)
-    assert "no_https" in meta["facts"] and meta["score"]["site_need"] == 55
+    # Measured facts the model left out are added by code.
+    added = {f["fact_id"] for f in json.loads(a.issues_json) if f.get("added_by") == "code"}
+    assert added == {"no_https", "pdf_menu"} and res["issues_kept"] == 4
     payload = json.loads(calls[0]["user"])
     assert payload["business"]["name"] == "Frank's Diner" and "phone_not_tappable" in payload["facts"]
 

@@ -139,6 +139,7 @@ def _result_from_meta(meta: dict, cache: Path, cached: bool) -> dict:
         "https_ok": meta.get("https_ok"),
         "mobile": meta.get("mobile") or {},
         "cert": meta.get("cert") or {},
+        "cert_ignored": bool(meta.get("cert_ignored")),
         "extra_pages": [str(cache / p) for p in meta.get("extra_pages", []) if (cache / p).exists()],
         "error": meta.get("error"),
     }
@@ -146,7 +147,7 @@ def _result_from_meta(meta: dict, cache: Path, cached: bool) -> dict:
 
 def fetch_page(url: str, *, force: bool = False, wait_until: str | None = None,
                mobile: bool = True, crawl: bool = True,
-               _https_failed: bool = False) -> dict:
+               _https_failed: bool = False, _ignore_cert: bool = False) -> dict:
     """Fetch and cache the page.
 
     `crawl`: also save up to 3 same-site contact/about pages as extra_N.html.
@@ -181,6 +182,7 @@ def fetch_page(url: str, *, force: bool = False, wait_until: str | None = None,
                     viewport={"width": PW["viewport_width"], "height": PW["viewport_height"]},
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                                "(KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+                    ignore_https_errors=_ignore_cert,
                 )
                 page = context.new_page()
                 try:
@@ -223,7 +225,7 @@ def fetch_page(url: str, *, force: bool = False, wait_until: str | None = None,
                 # Mobile render.
                 if html and not error and mobile:
                     try:
-                        mctx = browser.new_context(**p.devices["iPhone 13"])
+                        mctx = browser.new_context(**p.devices["iPhone 13"], ignore_https_errors=_ignore_cert)
                         mpage = mctx.new_page()
                         sizes = {"bytes": 0, "requests": 0}
 
@@ -254,6 +256,13 @@ def fetch_page(url: str, *, force: bool = False, wait_until: str | None = None,
     except Exception as e:
         error = (str(e).strip().splitlines() or [type(e).__name__])[0][:300]
 
+    # A bad certificate (usually expired) is itself the finding: visitors get a
+    # full-page browser warning. Load past it once so the site can still be
+    # audited; check_certificate below records why it failed.
+    if error and "ERR_CERT" in error and not _ignore_cert:
+        return fetch_page(url, force=True, wait_until=wait_until, mobile=mobile, crawl=crawl,
+                          _https_failed=_https_failed, _ignore_cert=True)
+
     # Retry once over http:// for TLS / connection failures — legacy small-business
     # sites (our best ICP) are often http-only or have broken certificates.
     if error and url.startswith("https://") and not _https_failed and any(
@@ -283,6 +292,7 @@ def fetch_page(url: str, *, force: bool = False, wait_until: str | None = None,
         "extra_pages": extra_saved,
         "crawled": bool(crawl),
         "wait_until": wait_until or PW["wait_until"],
+        "cert_ignored": _ignore_cert,
     }
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     return _result_from_meta(meta, cache, cached=False)
