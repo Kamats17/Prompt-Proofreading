@@ -19,6 +19,7 @@ from app.db.repo import (
 from app.draft.generator import generate_draft
 from app.draft.name_guess import guess_first_name, first_name_from_full
 from app.draft.qa_gate import run_qa
+from app.audit.grader import rebuild_case
 from app.draft.voice import pick_subject, short_name, greeting_name
 
 
@@ -67,6 +68,8 @@ def draft_for_prospect(conn: sqlite3.Connection, prospect_id: int,
                                 owner_first_name=meta.get("owner_first_name"), email=p.email)
     primary, second = verified[0], (verified[1] if len(verified) > 1 else None)
     subject = pick_subject(p.company, primary.get("type"), seed=prospect_id)
+    facts = meta.get("facts") or {}
+    rebuild = rebuild_case(facts)
     short = short_name(p.company)
 
     def _gen(feedback=None, prior_body=None):
@@ -74,7 +77,7 @@ def draft_for_prospect(conn: sqlite3.Connection, prospect_id: int,
             company=p.company, short=short, industry=p.industry, city=p.city,
             greeting=greeting, subject=subject, primary=primary, second=second,
             personal_detail=meta.get("personal_detail", ""), demo_offer=audit.demo_angle or "",
-            feedback=feedback, prior_body=prior_body)
+            rebuild=rebuild, feedback=feedback, prior_body=prior_body)
 
     def _qa(gen):
         return run_qa(
@@ -82,7 +85,8 @@ def draft_for_prospect(conn: sqlite3.Connection, prospect_id: int,
             subject=subject, body_text=gen["body_text"],
             audit_issues_json=audit.issues_json or "[]", final_grade=audit.final_grade,
             prospect_id=prospect_id, used_quotes=gen.get("used_quotes"),
-            used_fact_ids=gen.get("used_fact_ids"), touch=1, blocked_reason=p.blocked_reason)
+            used_fact_ids=gen.get("used_fact_ids"), touch=1, blocked_reason=p.blocked_reason,
+            audit_facts=facts)
 
     gen = _gen()
     if "error" in gen:
@@ -118,6 +122,7 @@ def draft_for_prospect(conn: sqlite3.Connection, prospect_id: int,
         payload_json=json.dumps({"qa_pass": qa["pass"], "blockers": qa["blockers"],
                                  "warnings": qa["warnings"], "retried": retried,
                                  "finding_type": primary.get("type"), "subject": subject,
+                                 "rebuild_worthy": rebuild["worthy"],
                                  "used_quotes": gen.get("used_quotes"),
                                  "used_fact_ids": gen.get("used_fact_ids")}),
     ))

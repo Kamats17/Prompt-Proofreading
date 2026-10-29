@@ -38,6 +38,33 @@ HIGH_TICKET = ("dent", "orthodont", "medical", "clinic", "chiro", "law", "legal"
 MANAGED_PLATFORMS = {"popmenu", "bentobox", "owner_com", "spothopper"}
 
 
+# ---- when is a full rebuild worth mentioning? ------------------------------------
+# Strong: the site itself is built in a dated way. Moderate: fixable, but adds up.
+REBUILD_STRONG = ("desktop_layout_on_phone", "no_viewport_meta", "mobile_horizontal_scroll",
+                  "no_https", "cert_expired", "heavy_page_mobile", "slow_main_content")
+REBUILD_MODERATE = ("stale_copyright", "pdf_menu", "phone_not_tappable", "small_text_mobile",
+                    "dead_links:", "no_order_link_found", "no_booking_link_found")
+REBUILD_DATED = REBUILD_STRONG + ("stale_copyright",)
+
+
+def rebuild_case(facts: dict[str, str]) -> dict:
+    """Decide from code-verified facts whether to mention a full rebuild.
+
+    Worthy when the evidence adds up (strong signal = 2 points, moderate = 1,
+    need 2+) AND at least one signal shows the site itself is dated. A modern
+    site with one small gap never gets a rebuild pitch.
+    Returns {worthy, points, dated_signals: [{fact_id, fact_detail}]}.
+    """
+    def has(prefix: str) -> list[str]:
+        return [f for f in facts if f == prefix or (prefix.endswith(":") and f.startswith(prefix))]
+
+    points = sum(2 for p in REBUILD_STRONG if has(p)) + sum(1 for p in REBUILD_MODERATE if has(p))
+    dated = [fid for p in REBUILD_DATED for fid in has(p)]
+    worthy = points >= 2 and bool(dated)
+    return {"worthy": worthy, "points": points,
+            "dated_signals": [{"fact_id": fid, "fact_detail": facts[fid]} for fid in dated] if worthy else []}
+
+
 def grade_from_icp(icp_score: int) -> str:
     if icp_score >= ICP_MIN_FOR_A:
         return "A"

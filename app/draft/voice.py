@@ -138,12 +138,11 @@ def footer_lines() -> list[str]:
     """CAN-SPAM elements: identify the message as a solicitation, explain how to
     opt out, and (when configured) the sender's postal address."""
     lines = []
-    if _is_real_value(SENDER_IDENTITY_LINE):
-        lines.append(SENDER_IDENTITY_LINE)
-    if _is_real_value(OPT_OUT_LINE):
-        lines.append(OPT_OUT_LINE)
     if _is_real_value(SENDER_POSTAL_ADDRESS):
         lines.append(SENDER_POSTAL_ADDRESS)
+    tail = " ".join(x for x in (SENDER_IDENTITY_LINE, OPT_OUT_LINE) if _is_real_value(x))
+    if tail:
+        lines.append(tail)
     return lines
 
 
@@ -183,7 +182,7 @@ def render_signature_html(*, first_touch: bool = True) -> str:
     parts.append(f"<a href=\"mailto:{SENDER_EMAIL}\">{SENDER_EMAIL}</a></p>")
     lines = footer_lines()
     if lines:
-        parts.append('<p style="font-size:12px;color:#888;">'
+        parts.append('<p style="font-size:12px;color:#555;">'
                      + "<br>".join(html.escape(x) for x in lines) + "</p>")
     return "".join(parts)
 

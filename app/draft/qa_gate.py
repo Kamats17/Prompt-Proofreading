@@ -66,7 +66,8 @@ def run_qa(conn: sqlite3.Connection, *,
            used_fact_ids: list[str] | None = None,
            touch: int = 1,
            human_edited: bool = False,
-           blocked_reason: str | None = None) -> dict:
+           blocked_reason: str | None = None,
+           audit_facts: dict | None = None) -> dict:
     blockers: list[str] = []
     warnings: list[str] = []
     checks: dict[str, bool] = {}
@@ -86,6 +87,9 @@ def run_qa(conn: sqlite3.Connection, *,
     except json.JSONDecodeError:
         issues = []
     verified_quotes, verified_facts = _verified(issues)
+    # Facts computed in code for this page are verified by construction, even if the
+    # audit didn't pick them as findings (e.g. the dated-site signal in a rebuild line).
+    verified_facts |= set(audit_facts or {})
 
     # ---- style checks ----
     if touch == 1:

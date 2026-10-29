@@ -7,7 +7,8 @@ def test_no_address_rendered_when_empty(monkeypatch):
     out = voice.render_signature_html()
     assert "VERIFY" not in out
     assert "reply" in out.lower() and "email again" in out.lower()  # opt-out line present
-    assert "solicitation" in out.lower()  # ad identification present
+    assert "offer my web design services" in out.lower()  # identifies it as a sales email
+    assert "one-time" not in out.lower()                    # follow-ups exist, so never claim one-time
 
 
 def test_placeholder_address_never_rendered(monkeypatch):

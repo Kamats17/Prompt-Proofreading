@@ -52,8 +52,8 @@
   "compliance": {
     "require_postal_address": true,
     "sender_postal_address": "",
-    "sender_identity_line": "PromptProofreading.com is a small web studio. This is a one-time business solicitation.",
-    "opt_out_line": "If this isn't useful, reply \"no\" and I won't email again."
+    "sender_identity_line": "I'm reaching out to offer my web design services.",
+    "opt_out_line": "If you'd rather not hear from me, reply \"no\" and I won't email again."
   },
   "banned_phrases": [
     "game-changer", "game changer", "synergy", "synergies",

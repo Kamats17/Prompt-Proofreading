@@ -23,7 +23,7 @@ def _banned_block() -> str:
 
 SYSTEM_PROMPT = f"""You write the first cold email from {SENDER_FIRST_NAME}, who runs a one-person web studio. It should read like {SENDER_FIRST_NAME} typed it after looking at the prospect's site on his phone: short, specific, plain, polite. It is not a report.
 
-INPUT (JSON): business_name, short_name, industry, city, greeting_name, subject (already chosen; it names the primary finding), primary_finding, second_finding (optional), personal_detail (optional), demo_offer.
+INPUT (JSON): business_name, short_name, industry, city, greeting_name, subject (already chosen; it names the primary finding), primary_finding, second_finding (optional), personal_detail (optional), demo_offer, rebuild ({{worthy, dated_signals: [{{fact_id, fact_detail}}]}}).
 Each finding has evidence_kind:
 - "quote": you may put the quote, or a shorter contiguous part of it, in straight double quotes "like this", copied character for character. Never fix its spelling, capitals, or punctuation. Refer to where it came from using quote_location exactly (e.g. "your homepage says", "the description that shows up in search results says"); never call it Google's text or anything else.
 - "fact": describe it in your own words using customer_moment. Never put it in quotation marks.
@@ -33,8 +33,14 @@ SHAPE: plain text, {DRAFT_MIN_WORDS}-{DRAFT_MAX_WORDS} words before the sign-off
 Hi {{greeting_name}},
 
 Paragraph 1 (1-2 sentences): open with the primary finding from a customer's point of view, and say {SENDER_FIRST_NAME} looked at the site (for example "I pulled up {{short_name}}'s site on my phone and..."). You may use personal_detail in a few words; no praise.
-Paragraph 2 (1-2 sentences): the fix in plain words; optionally the second finding in one clause. Say {SENDER_FIRST_NAME} does this kind of fix for local businesses. No service names, no list of offerings.
-Paragraph 3 (one sentence): offer demo_offer free and ask one yes/no question answerable in one word, e.g. "Want me to send it over?" Ask nothing else.
+Paragraph 2 (1-3 sentences): the fix in plain words (call it a quick fix); optionally the second finding in one clause.
+  - If rebuild.worthy is true: add ONE sentence that states one item from rebuild.dated_signals in plain words (from its fact_detail only) and says that if they've been thinking about a fresh site altogether, {SENDER_FIRST_NAME} builds those for businesses like theirs too, naming the kind of business naturally (e.g. "for local restaurants", "for local dental offices"). Add that fact_id to used_fact_ids.
+  - If rebuild.worthy is false: say {SENDER_FIRST_NAME} does this kind of fix for local businesses, and never mention a new site, redesign, or rebuild.
+  No service names, no list of offerings.
+Paragraph 3 (one sentence): one yes/no question answerable in one word.
+  - rebuild.worthy false: offer demo_offer free, e.g. "Want me to send it over?"
+  - rebuild.worthy true: offer both in the same question: demo_offer free, plus a rough idea of what a full refresh would look like.
+  Ask nothing else.
 
 Thanks,
 {SENDER_FIRST_NAME}
@@ -52,14 +58,18 @@ If the input includes previous_attempt_failed_checks, fix every listed check and
 
 OUTPUT strict JSON only (no code fences):
 {{"body_text":"Hi ...\\n\\n...\\n\\nThanks,\\n{SENDER_FIRST_NAME}","used_quotes":["..."],"used_fact_ids":["..."]}}
+used_quotes and used_fact_ids must list EVERY quote and fact id the email relies on, not just one.
 If primary_finding is missing, output {{"error":"no_evidence"}}."""
 
 
 FOLLOWUP_SYSTEM_PROMPT = f"""You write a short follow-up email from {SENDER_FIRST_NAME} (one-person web studio) in the SAME thread as an earlier cold email that got no reply. It is a reply, so no subject line.
 
-INPUT (JSON): touch (2 or 3), greeting_name, short_name, previous_body (what was already sent), second_finding (optional, touch 2 only), demo_offer.
+INPUT (JSON): touch (2 or 3), greeting_name, short_name, industry, previous_body (what was already sent), second_finding (optional, touch 2 only), demo_offer, rebuild ({{worthy, dated_signals}}).
 
-Touch 2: {FOLLOWUP_MIN_WORDS}-{max(FOLLOWUP_MIN_WORDS + 10, FOLLOWUP_MAX_WORDS - 10)} words. Mention one new, concrete thing (the second_finding if given, described in plain words), or restate the free offer more specifically. End with the same kind of one-word yes/no question.
+Touch 2: {FOLLOWUP_MIN_WORDS}-{max(FOLLOWUP_MIN_WORDS + 10, FOLLOWUP_MAX_WORDS - 10)} words.
+  - rebuild.worthy true: lead with the bigger option. State one item from rebuild.dated_signals in plain words (from its fact_detail only), say a fresh site would fix that along with the issue from the first email, and offer a rough idea of what a full refresh would cost. Add that fact_id to used_fact_ids.
+  - otherwise: mention one new, concrete thing (the second_finding if given, described in plain words), or restate the free offer more specifically.
+  End with one one-word yes/no question.
 Touch 3: {FOLLOWUP_MIN_WORDS}-40 words. Polite close-out: say you won't keep emailing, and the offer stands if it's ever useful. End with a yes/no question.
 
 Rules: plain text; "Hi {{greeting_name}}," first line; sign off "Thanks,\\n{SENDER_FIRST_NAME}". No links, URLs, phone numbers, em/en dashes, exclamation marks, emoji, guilt, urgency, or invented impact. Never repeat the first email's wording. Don't put anything in quotation marks unless it is copied exactly from second_finding.quote.
@@ -159,7 +169,7 @@ def _finding_for_prompt(f: Optional[dict]) -> Optional[dict]:
 
 def generate_draft(*, company: str, short: str, industry: Optional[str], city: Optional[str],
                    greeting: str, subject: str, primary: dict, second: Optional[dict],
-                   personal_detail: str = "", demo_offer: str = "",
+                   personal_detail: str = "", demo_offer: str = "", rebuild: Optional[dict] = None,
                    feedback: Optional[list[str]] = None,
                    prior_body: Optional[str] = None) -> dict:
     """First-touch draft. Returns {subject, body_text, body_html, used_quotes,
@@ -172,6 +182,7 @@ def generate_draft(*, company: str, short: str, industry: Optional[str], city: O
         "primary_finding": _finding_for_prompt(primary),
         "second_finding": _finding_for_prompt(second),
         "personal_detail": personal_detail, "demo_offer": demo_offer,
+        "rebuild": rebuild or {"worthy": False, "dated_signals": []},
     }
     if feedback:
         payload["previous_attempt_failed_checks"] = feedback
@@ -183,13 +194,16 @@ def generate_draft(*, company: str, short: str, industry: Optional[str], city: O
 
 
 def generate_followup(*, touch: int, greeting: str, short: str, previous_body: str,
-                      second: Optional[dict], demo_offer: str,
+                      second: Optional[dict], demo_offer: str, industry: str = "",
+                      rebuild: Optional[dict] = None,
                       feedback: Optional[list[str]] = None,
                       prior_body: Optional[str] = None) -> dict:
     payload = {"touch": touch, "greeting_name": greeting, "short_name": short,
                "previous_body": previous_body,
                "second_finding": _finding_for_prompt(second) if touch == 2 else None,
-               "demo_offer": demo_offer}
+               "demo_offer": demo_offer, "industry": industry,
+               "rebuild": (rebuild or {"worthy": False, "dated_signals": []}) if touch == 2
+               else {"worthy": False, "dated_signals": []}}
     if feedback:
         payload["previous_attempt_failed_checks"] = feedback
         payload["previous_body_text"] = prior_body or ""

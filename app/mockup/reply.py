@@ -13,6 +13,7 @@ from pathlib import Path
 
 from app.db.models import Event
 from app.db.repo import get_prospect, latest_audit_for_prospect, log_event
+from app.audit.grader import rebuild_case
 from app.draft.generator import to_html_body
 from app.draft.gmail_client import create_gmail_draft
 from app.draft.pipeline import resolve_greeting
@@ -46,9 +47,13 @@ def default_reply_text(conn: sqlite3.Connection, prospect_id: int,
     changes = plan_changes(meta.get("facts") or {}, issues, bool(p.phone))[:3]
     bullets = "\n".join(f"- {c['title']}" for c in changes) or "- A phone-first layout for the homepage"
     d1, d2 = next_business_days(2, today)
+    bigger = ""
+    if rebuild_case(meta.get("facts") or {})["worthy"]:
+        bigger = ("If a fresh site makes more sense than patching this one, I can bring a rough "
+                  "quote for a full rebuild to the call too.\n\n")
     return (f"Hi {greeting},\n\n"
             f"Here's the mockup I mentioned. On the left is {short_name(p.company)}'s homepage on a "
-            f"phone today, and on the right is what I'd change:\n\n{bullets}\n\n"
+            f"phone today, and on the right is what I'd change:\n\n{bullets}\n\n{bigger}"
             f"Happy to walk you through it in 10 minutes. Would {d1} or {d2} work?\n\n"
             f"Thanks,\n{SENDER_FIRST_NAME}")
 

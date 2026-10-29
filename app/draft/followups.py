@@ -18,6 +18,7 @@ from app.db.repo import (
     get_prospect, get_audit, insert_draft, log_event, latest_live_draft_for_prospect,
     DuplicateDraftError,
 )
+from app.audit.grader import rebuild_case
 from app.draft.generator import generate_followup
 from app.draft.pipeline import resolve_greeting
 from app.draft.qa_gate import run_qa
@@ -88,6 +89,8 @@ def create_followups(conn: sqlite3.Connection, *, limit: int = 20,
         issues = [i for i in json.loads(audit.issues_json or "[]") if i.get("confidence") == "verified"]
         meta = json.loads(audit.meta_json or "{}")
         second = issues[1] if len(issues) > 1 else None
+        facts = meta.get("facts") or {}
+        rebuild = rebuild_case(facts)
         greeting = resolve_greeting(explicit=None, contact_name=p.contact_name,
                                     owner_first_name=meta.get("owner_first_name"), email=p.email)
         subject = prev["subject"] if prev["subject"].lower().startswith("re:") else f"Re: {prev['subject']}"
@@ -95,8 +98,8 @@ def create_followups(conn: sqlite3.Connection, *, limit: int = 20,
         def _gen(feedback=None, prior_body=None):
             return generate_followup(touch=nxt, greeting=greeting, short=short_name(p.company),
                                      previous_body=prev["body_text"], second=second,
-                                     demo_offer=audit.demo_angle or "",
-                                     feedback=feedback, prior_body=prior_body)
+                                     demo_offer=audit.demo_angle or "", industry=p.industry or "",
+                                     rebuild=rebuild, feedback=feedback, prior_body=prior_body)
 
         def _qa(gen):
             return run_qa(conn, company=p.company, prospect_email=p.email, prospect_url=p.url,
@@ -104,7 +107,7 @@ def create_followups(conn: sqlite3.Connection, *, limit: int = 20,
                           audit_issues_json=audit.issues_json or "[]",
                           final_grade=audit.final_grade, prospect_id=p.id,
                           used_quotes=gen.get("used_quotes"), used_fact_ids=gen.get("used_fact_ids"),
-                          touch=nxt, blocked_reason=p.blocked_reason)
+                          touch=nxt, blocked_reason=p.blocked_reason, audit_facts=facts)
 
         gen = _gen()
         if "error" in gen:

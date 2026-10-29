@@ -67,6 +67,7 @@ def _qa_for_draft(conn, d, *, body_text=None, subject=None, human_edited=None) -
         human_edited=bool(d.human_edited if human_edited is None else human_edited),
         blocked_reason=p.blocked_reason,
         used_quotes=ev.get("used_quotes") or None, used_fact_ids=ev.get("used_fact_ids") or None,
+        audit_facts=json.loads(audit.meta_json or "{}").get("facts"),
     )
 
 
