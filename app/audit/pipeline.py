@@ -24,7 +24,7 @@ from bs4 import BeautifulSoup
 from app.audit.fetcher import fetch_page
 from app.audit.extractor import (
     extract_features, compute_facts, extract_emails, choose_contact_email,
-    dead_site_reason, identity_mismatch_reason, page_text_for_quotes,
+    dead_site_reason, domain_names_business, identity_mismatch_reason, page_text_for_quotes,
 )
 from app.audit.audit_agent import run_audit
 from app.audit.grader import combine, score_lead
@@ -154,8 +154,9 @@ def audit_prospect(conn: sqlite3.Connection, prospect_id: int, *,
                      "audit_fetch_failed", {"fetched": fetched}, "fetch")
 
     final_url = fetched.get("final_url") or p.url
-    if registered_domain(final_url) != registered_domain(p.url):
-        agg2, why2 = is_aggregator(final_url)
+    agg2, why2 = is_aggregator(final_url)
+    if registered_domain(final_url) != registered_domain(p.url) and (
+            agg2 or not domain_names_business(final_url, p.company)):
         detail = f"{p.url} redirects to {final_url}" + (f" ({why2})" if agg2 else "")
         return _block(conn, prospect_id, "redirect_offsite", "audit_skipped_redirect",
                       {"detail": detail, "final_url": final_url})
@@ -209,7 +210,7 @@ def audit_prospect(conn: sqlite3.Connection, prospect_id: int, *,
                     if e not in candidates:
                         candidates.append(e)
             exclude = features.get("credit_link_domains") or []
-            chosen, why = choose_contact_email(candidates, final_url, exclude)
+            chosen, why = choose_contact_email(candidates, final_url, exclude, company=p.company)
             log_event(conn, Event(prospect_id=prospect_id, event_type="email_harvest",
                                   payload_json=json.dumps({"chosen": chosen, "why": why,
                                                            "candidates": candidates})))

@@ -454,11 +454,30 @@ def extract_emails(html_path: str | Path) -> list[str]:
     return found[:8]
 
 
+# Substring match on a squashed label, so only words that can't hide inside a
+# business name ("seo" sits inside "houseofpancakes").
+_VENDOR_WORDS = ("design", "media", "marketing", "digital", "website", "studio",
+                 "hosting", "agency", "creative", "solutions")
+
+
+def domain_names_business(domain: str, company: str | None) -> bool:
+    """True when another domain carries the business's distinctive name: the
+    owner's second domain (marylandmallet.com site, management@mdmallet.com) or
+    a move (smyrnadiner.net -> smyrnadiner.com). Vendor-looking names never count."""
+    reg = registered_domain(domain) or ""
+    label = re.sub(r"[^a-z0-9]", "", reg.split(".")[0].lower())
+    if not label or not company or any(w in label for w in _VENDOR_WORDS):
+        return False
+    return any(len(t) >= 4 and t in label for t in _name_tokens(company))
+
+
 def choose_contact_email(candidates: list[str], prospect_url: str,
-                         exclude_domains: list[str] | None = None) -> tuple[str | None, str]:
+                         exclude_domains: list[str] | None = None,
+                         company: str | None = None) -> tuple[str | None, str]:
     """Pick the address to email, or (None, reason).
 
-    Only the business's own domain (incl. subdomains) or a common free-mail
+    Only the business's own domain (incl. subdomains), another domain carrying
+    the business's name (see domain_names_business), or a common free-mail
     provider is accepted. Anything else on the page is usually a vendor, agency,
     or platform (the footer "website by" credit) — emailing them a critique of
     their own work, or a stranger, is worse than not emailing at all.
@@ -468,6 +487,11 @@ def choose_contact_email(candidates: list[str], prospect_url: str,
     own_hits = [e for e in candidates if registered_domain(e.split("@", 1)[1]) == own]
     if own_hits:
         return own_hits[0], "harvested_own_domain"
+    named = [e for e in candidates if registered_domain(e.split("@", 1)[1]) not in excluded
+             and e.split("@", 1)[1] not in FREE_MAIL_DOMAINS
+             and domain_names_business(e.split("@", 1)[1], company)]
+    if named:
+        return named[0], "harvested_name_domain"
     free = [e for e in candidates if e.split("@", 1)[1] in FREE_MAIL_DOMAINS
             and not re.search(r"\.(com|net|org|io|co)\b", e.split("@", 1)[0])
             and registered_domain(e.split("@", 1)[1]) not in excluded]

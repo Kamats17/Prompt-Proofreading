@@ -115,3 +115,36 @@ def test_batch_runs_until_target_drafts(conn, monkeypatch):
     assert st["ready"] == 2 and st["tried"] == 4 and st["stopped"] == "target reached"
     st = cli.run_until_drafts(conn, target=5, max_audits=50, quiet=True)
     assert st["ready"] == 2 and st["stopped"].startswith("no more leads")   # list ran out
+
+
+def test_email_on_second_domain_with_business_name():
+    from app.audit.extractor import choose_contact_email
+    assert choose_contact_email(["management@mdmallet.com"], "https://marylandmallet.com",
+                                company="Maryland Mallet Restaurant") == \
+        ("management@mdmallet.com", "harvested_name_domain")
+    assert choose_contact_email(["info@jackiesplace.com"], "https://jackiesplacealaska.com",
+                                company="Jackie's Place")[0] == "info@jackiesplace.com"
+    # A vendor or stranger's domain never counts, even with a shared word.
+    assert choose_contact_email(["tyler@thedentaloutlet.com"], "https://sevadental.com",
+                                company="Seva Dental")[0] is None
+    assert choose_contact_email(["bob@malletwebdesign.com"], "https://marylandmallet.com",
+                                company="Maryland Mallet Restaurant")[0] is None
+
+
+def test_redirect_to_own_new_domain_is_audited(conn, monkeypatch, tmp_path):
+    from app.audit import pipeline as audit_pipeline
+    monkeypatch.setattr(audit_pipeline, "fetch_page", lambda url, **kw: {
+        "ok": True, "final_url": "https://smyrnadiner.com/", "html_path": str(tmp_path / "none.html")})
+    pid = upsert_prospect(conn, Prospect(company="Smyrna Diner", url="https://smyrnadiner.net", source="manual"))
+    res = audit_pipeline.audit_prospect(conn, pid)
+    assert res.get("blocked") != "redirect_offsite"
+    pid2 = upsert_prospect(conn, Prospect(company="Montville Pizzeria", url="https://montvillepizzeria.com",
+                                          source="manual"))
+    monkeypatch.setattr(audit_pipeline, "fetch_page", lambda url, **kw: {
+        "ok": True, "final_url": "https://www.estancoparador.com/", "html_path": "x"})
+    assert audit_pipeline.audit_prospect(conn, pid2)["blocked"] == "redirect_offsite"
+
+
+def test_vendor_filter_does_not_trip_inside_names():
+    from app.audit.extractor import domain_names_business
+    assert domain_names_business("purplecowhouseofpancakes.com", "Purple Cow House of Pancakes")
