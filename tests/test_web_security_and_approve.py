@@ -85,6 +85,22 @@ def test_approve_pushes_once_and_stamps_contact(env, monkeypatch):
     assert get_prospect(conn, pid).last_contacted_at is not None
 
 
+def test_approve_and_reject_move_to_next_draft(env, monkeypatch):
+    client, conn, pid, did = env
+    pid2 = upsert_prospect(conn, Prospect(company="Ann's Cafe", url="https://annscafe.com",
+                                          source="manual", email="ann@annscafe.com"))
+    aid2 = insert_audit(conn, Audit(prospect_id=pid2, issues_json=ISSUES, final_grade="B", icp_score=50))
+    did2 = insert_draft(conn, Draft(prospect_id=pid2, audit_id=aid2, subject="x", body_text="y",
+                                    body_html="<p>y</p>", qa_pass=1))
+    monkeypatch.setattr(routes, "create_gmail_draft",
+                        lambda **kw: {"success": True, "draft_id": "g1", "thread_id": "t1"})
+    r = client.post(f"/api/draft/{did}/approve", follow_redirects=False)
+    assert r.headers["location"].startswith(f"/prospect/{pid2}?")      # next lead, not the one just pushed
+    r = client.post(f"/api/draft/{did2}/reject", data={"category": "tone"}, follow_redirects=False)
+    assert r.headers["location"].startswith("/queue?") and "empty" in r.headers["location"]
+    assert "Queue is empty" in client.get(r.headers["location"]).text
+
+
 def test_approve_failure_rolls_back_to_pending(env, monkeypatch):
     client, conn, pid, did = env
 

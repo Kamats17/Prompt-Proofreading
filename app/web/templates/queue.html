@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Review queue{% endblock %}
 {% block content %}
+{% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
 {% for w in compliance %}<div class="banner">{{ w }}</div>{% endfor %}
 <section class="filters">
   <h1>Review queue <small class="muted">({{ items | length }} pending)</small></h1>

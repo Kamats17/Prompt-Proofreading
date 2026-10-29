@@ -53,6 +53,19 @@ def _back(prospect_id: int, msg: str) -> RedirectResponse:
     return RedirectResponse(f"/prospect/{prospect_id}?msg={quote(msg)}", status_code=303)
 
 
+_QUEUE_ORDER_SQL = """SELECT d.id, d.prospect_id FROM drafts d JOIN audits a ON a.id = d.audit_id
+                       WHERE d.status = 'pending'
+                       ORDER BY d.qa_pass DESC, a.icp_score DESC, d.id ASC"""
+
+
+def _to_next(conn, msg: str) -> RedirectResponse:
+    """After a draft leaves the queue, open the next pending one (queue order)."""
+    row = conn.execute(_QUEUE_ORDER_SQL + " LIMIT 1").fetchone()
+    if row:
+        return _back(row["prospect_id"], msg)
+    return RedirectResponse(f"/queue?msg={quote(msg + ' Queue is empty.')}", status_code=303)
+
+
 def _qa_for_draft(conn, d, *, body_text=None, subject=None, human_edited=None) -> dict:
     """Re-run QA against CURRENT prospect/DNC/contact state."""
     p = get_prospect(conn, d.prospect_id)
@@ -105,13 +118,10 @@ def register_routes(app: FastAPI, templates: Jinja2Templates) -> None:
         })
 
     @app.get("/queue", response_class=HTMLResponse)
-    def queue(request: Request):
+    def queue(request: Request, msg: str | None = None):
         """Review queue: every pending draft with its evidence, one screen each."""
         with closing(_conn()) as conn:
-            rows = conn.execute(
-                """SELECT d.id FROM drafts d JOIN audits a ON a.id = d.audit_id
-                   WHERE d.status = 'pending'
-                   ORDER BY d.qa_pass DESC, a.icp_score DESC, d.id ASC LIMIT 200""").fetchall()
+            rows = conn.execute(_QUEUE_ORDER_SQL + " LIMIT 200").fetchall()
             items = []
             for r in rows:
                 d = get_draft(conn, r["id"])
@@ -124,7 +134,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates) -> None:
         return templates.TemplateResponse(request, "queue.html", {
             "items": items, "brand": BRAND, "pushed_today": pushed_today,
             "daily_cap": DAILY_NEW_CAP, "reject_categories": REJECT_CATEGORIES,
-            "compliance": compliance_warnings(),
+            "compliance": compliance_warnings(), "flash": msg or "",
         })
 
     @app.get("/prospect/{prospect_id}", response_class=HTMLResponse)
@@ -293,7 +303,9 @@ def register_routes(app: FastAPI, templates: Jinja2Templates) -> None:
                         payload={"gmail_draft_id": result.get("draft_id"), "state_ok": moved})
         if not result.get("success"):
             return _back(prospect_id, f"Gmail push failed (draft back to pending): {result.get('error')}")
-        return _back(prospect_id, "Pushed to Gmail Drafts. Review and send it from Gmail.")
+        with closing(_conn()) as conn:
+            company = get_prospect(conn, prospect_id).company
+            return _to_next(conn, f"{company} pushed to Gmail Drafts. Review and send it from Gmail.")
 
     @app.post("/api/draft/{draft_id}/reject")
     def api_reject_draft(draft_id: int, reason: str = Form(""), category: str = Form("other")):
@@ -309,7 +321,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates) -> None:
                 mark_prospect_blocked(conn, d.prospect_id, f"rejected:{cat}")
             log(conn, "rejected", prospect_id=d.prospect_id, draft_id=draft_id,
                 payload={"reason": reason, "category": cat})
-        return _back(d.prospect_id, "Draft rejected.")
+            return _to_next(conn, f"{get_prospect(conn, d.prospect_id).company} draft rejected.")
 
     @app.post("/api/draft/{draft_id}/regenerate")
     async def api_regenerate_draft(draft_id: int):
