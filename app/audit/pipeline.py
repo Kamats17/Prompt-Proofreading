@@ -94,6 +94,11 @@ def audit_prospect(conn: sqlite3.Connection, prospect_id: int, *,
         return _block(conn, prospect_id, "dnc", "audit_skipped_dnc", {"detail": dnc})
 
     fetched = fetch_page(p.url, force=force_fetch)
+    if not fetched.get("ok") and "ERR_NAME_NOT_RESOLVED" in (fetched.get("error") or ""):
+        # The domain no longer exists: no point retrying, and the business has
+        # lost its website, which makes it a strong call-list prospect.
+        return _block(conn, prospect_id, "domain_dead", "audit_skipped_domain_dead",
+                      {"detail": f"{p.url} no longer resolves (website address is gone)"})
     if not fetched.get("ok"):
         return _fail(conn, prospect_id, fetched.get("error") or "fetch failed",
                      "audit_fetch_failed", {"fetched": fetched}, "fetch")

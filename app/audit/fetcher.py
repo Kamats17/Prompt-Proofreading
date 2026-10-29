@@ -252,7 +252,7 @@ def fetch_page(url: str, *, force: bool = False, wait_until: str | None = None,
             finally:
                 browser.close()
     except Exception as e:
-        error = str(e)[:300]
+        error = (str(e).strip().splitlines() or [type(e).__name__])[0][:300]
 
     # Retry once over http:// for TLS / connection failures — legacy small-business
     # sites (our best ICP) are often http-only or have broken certificates.

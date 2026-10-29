@@ -53,6 +53,7 @@ ICP_MIN_FOR_B = _T["icp_min_for_b"]
 ICP_MIN_FOR_A = _T["icp_min_for_a"]
 DRAFT_MIN_WORDS = _T["draft_min_words"]
 DRAFT_MAX_WORDS = _T["draft_max_words"]
+DRAFT_MAX_WORDS_REBUILD = _T.get("draft_max_words_rebuild", DRAFT_MAX_WORDS + 10)
 FOLLOWUP_MIN_WORDS = _T.get("followup_min_words", 20)
 FOLLOWUP_MAX_WORDS = _T.get("followup_max_words", 70)
 FUZZY_DNC_THRESHOLD = _T["fuzzy_dnc_threshold"]

@@ -58,6 +58,8 @@ _CREDIT_RE = re.compile(
 )
 _CREDIT_STOP = {"toggle", "menu", "sliding", "bar", "home", "back", "top", "privacy", "terms",
                 "all", "rights", "reserved", "copyright", "contact", "follow", "skip"}
+_CREDIT_JUNK = {"the", "our", "us", "this", "that", "these", "you", "your", "we", "it", "its",
+                "wordpress", "love", "passion", "pride", "people", "local", "family"}
 _HARVEST_NOTICE = (
     "not be used for unsolicited", "not to be used for unsolicited", "no unsolicited",
     "do not send unsolicited", "will not give, sell", "will not sell or share",
@@ -250,7 +252,7 @@ def extract_features(html_path: str | Path, *, base_url: str | None = None) -> d
                 break
             words.append(w)
         credit = " ".join(words).strip(" .-")
-        if len(credit) >= 3 and credit.lower() not in ("the", "our", "us", "wordpress"):
+        if len(credit) >= 3 and credit.lower() not in _CREDIT_JUNK:
             credits.append(credit[:40])
     own_reg = registered_domain(base_url) if base_url else ""
     credit_link_domains = sorted({

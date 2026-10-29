@@ -11,7 +11,7 @@ from typing import Optional
 
 from app._claude_client import call_claude, ClaudeCallError
 from app.settings import (
-    MODEL_DRAFT, SENDER_FIRST_NAME, DRAFT_MIN_WORDS, DRAFT_MAX_WORDS,
+    MODEL_DRAFT, SENDER_FIRST_NAME, DRAFT_MIN_WORDS, DRAFT_MAX_WORDS, DRAFT_MAX_WORDS_REBUILD,
     FOLLOWUP_MIN_WORDS, FOLLOWUP_MAX_WORDS, BANNED_PHRASES,
 )
 from app.draft.voice import render_signature_html
@@ -29,7 +29,7 @@ Each finding has evidence_kind:
 - "fact": describe it in your own words using customer_moment. Never put it in quotation marks.
 Use no other quotation marks of any kind, including single quotes for emphasis or paraphrase.
 
-SHAPE: plain text, {DRAFT_MIN_WORDS}-{DRAFT_MAX_WORDS} words before the sign-off, three short paragraphs, no bullets, no links.
+SHAPE: plain text, {DRAFT_MIN_WORDS}-{DRAFT_MAX_WORDS} words before the sign-off (up to {DRAFT_MAX_WORDS_REBUILD} when rebuild.worthy is true), three short paragraphs, no bullets, no links.
 Hi {{greeting_name}},
 
 Paragraph 1 (1-2 sentences): open with the primary finding from a customer's point of view, and say {SENDER_FIRST_NAME} looked at the site (for example "I pulled up {{short_name}}'s site on my phone and..."). You may use personal_detail in a few words; no praise.

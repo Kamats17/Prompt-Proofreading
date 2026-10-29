@@ -27,6 +27,7 @@
     "icp_min_for_a": 65,
     "draft_min_words": 55,
     "draft_max_words": 105,
+    "draft_max_words_rebuild": 115,
     "followup_min_words": 20,
     "followup_max_words": 70,
     "fuzzy_dnc_threshold": 0.85

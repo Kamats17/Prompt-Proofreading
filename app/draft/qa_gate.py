@@ -16,7 +16,7 @@ import re
 import sqlite3
 
 from app.settings import (
-    DRAFT_MIN_WORDS, DRAFT_MAX_WORDS, FOLLOWUP_MIN_WORDS, FOLLOWUP_MAX_WORDS,
+    DRAFT_MIN_WORDS, DRAFT_MAX_WORDS, DRAFT_MAX_WORDS_REBUILD, FOLLOWUP_MIN_WORDS, FOLLOWUP_MAX_WORDS,
     RECONTACT_WINDOW_DAYS,
 )
 from app.draft.voice import (
@@ -96,6 +96,10 @@ def run_qa(conn: sqlite3.Connection, *,
         check("subject_allowed", subject_allowed(subject, company),
               f"subject {subject!r} is not one of the approved subjects", style=True)
     lo, hi = (DRAFT_MIN_WORDS, DRAFT_MAX_WORDS) if touch == 1 else (FOLLOWUP_MIN_WORDS, FOLLOWUP_MAX_WORDS)
+    if touch == 1 and audit_facts:
+        from app.audit.grader import rebuild_case
+        if rebuild_case(audit_facts)["worthy"]:
+            hi = DRAFT_MAX_WORDS_REBUILD   # two offers (quick fix + rebuild) need a little more room
     n_words = len(_body_before_signoff(body_text).split())
     check("word_count_ok", lo <= n_words <= hi, f"body is {n_words} words (target {lo}-{hi})", style=True)
     check("no_em_dash", not em_dash_hits(masked), "em/en dash or ' -- ' outside quotes", style=True)

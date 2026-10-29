@@ -39,7 +39,7 @@ def _no_email_prospects(conn: sqlite3.Connection, seen: set[str]) -> list[dict]:
     rows = conn.execute(
         """SELECT p.*, (SELECT meta_json FROM audits WHERE prospect_id = p.id
                         ORDER BY id DESC LIMIT 1) AS meta_json
-           FROM prospects p WHERE p.blocked_reason = 'no_email'""").fetchall()
+           FROM prospects p WHERE p.blocked_reason IN ('no_email', 'domain_dead')""").fetchall()
     out = []
     for r in rows:
         phone = normalize_phone(r["phone"])
@@ -50,11 +50,17 @@ def _no_email_prospects(conn: sqlite3.Connection, seen: set[str]) -> list[dict]:
         seen.add(phone)
         facts = (json.loads(r["meta_json"] or "{}") or {}).get("facts", {}) if r["meta_json"] else {}
         points = [c["title"] for c in plan_changes(facts, [], True)][:2]
-        pitch = ("Has a website but no email listed; " +
-                 ("talk about: " + "; ".join(points) + "." if points else "offer a free site review."))
+        if r["blocked_reason"] == "domain_dead":
+            pitch = (f"Their website address ({r['url']}) no longer works; customers who search for "
+                     "them hit a dead link. Offer a new site.")
+        else:
+            pitch = ("Has a website but no email listed; " +
+                     ("talk about: " + "; ".join(points) + "." if points else "offer a free site review."))
         out.append({"Business": r["company"], "Type": r["industry"] or "", "City": r["city"] or "",
                     "State": r["state"] or "", "Phone": phone, "Listing": r["url"], "Pitch": pitch,
-                    "Source note": "audited site, no email found", "Outcome": "", "Follow-up date": ""})
+                    "Source note": ("website address no longer exists" if r["blocked_reason"] == "domain_dead"
+                                    else "audited site, no email found"),
+                    "Outcome": "", "Follow-up date": ""})
     return out
 
 
