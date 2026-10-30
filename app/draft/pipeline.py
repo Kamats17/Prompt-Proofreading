@@ -17,7 +17,7 @@ from app.db.repo import (
     latest_live_draft_for_prospect, DuplicateDraftError,
 )
 from app.draft.generator import generate_draft
-from app.draft.name_guess import guess_first_name, first_name_from_full
+from app.draft.name_guess import COMMON_FIRST_NAMES, guess_first_name, first_name_from_full
 from app.draft.qa_gate import run_qa
 from app.audit.grader import rebuild_case
 from app.draft.voice import pick_subject, short_name, greeting_name
@@ -32,6 +32,18 @@ def resolve_greeting(*, explicit: str | None, contact_name: str | None,
         if cand:
             return cand
     return greeting_name(None)
+
+
+def resolve_greeting_for(company: str | None, **kw) -> str:
+    """resolve_greeting, but a name that is a later word of the business name
+    ('Stone' for SMC Stone, 'Domalakes' for Larry Domalakes Insurance) is a
+    surname or a business word, not who to greet."""
+    name = resolve_greeting(**kw)
+    words = [w.strip(".,&'").lower() for w in (company or "").split()]
+    if (name.lower() in words[1:] and name.lower() != words[0]
+            and name.lower() not in COMMON_FIRST_NAMES):  # 'Law Office of Nicholas ...' is fine
+        return greeting_name(None)
+    return name
 
 
 def draft_for_prospect(conn: sqlite3.Connection, prospect_id: int,
@@ -64,7 +76,7 @@ def draft_for_prospect(conn: sqlite3.Connection, prospect_id: int,
         return {"ok": False, "skipped": "audit has no verified evidence to cite"}
     meta = json.loads(audit.meta_json or "{}")
 
-    greeting = resolve_greeting(explicit=contact_name, contact_name=p.contact_name,
+    greeting = resolve_greeting_for(p.company, explicit=contact_name, contact_name=p.contact_name,
                                 owner_first_name=meta.get("owner_first_name"), email=p.email)
     primary, second = verified[0], (verified[1] if len(verified) > 1 else None)
     subject = pick_subject(p.company, primary.get("type"), seed=prospect_id)

@@ -38,3 +38,19 @@ def test_invalid_inputs():
     assert guess_first_name(None) is None
     assert guess_first_name("") is None
     assert guess_first_name("no-at-sign") is None
+
+
+def test_titles_business_words_and_surnames_are_not_greetings():
+    from app.draft.pipeline import resolve_greeting_for
+    assert guess_first_name("dr.steve67@gmail.com") is None
+    assert guess_first_name("stone.smcstone@gmail.com") is None
+    assert guess_first_name("domalakes_ins@hotmail.com") is None
+    assert first_name_from_full("Associations") is None
+    assert first_name_from_full("Insurance Policy") is None
+    assert resolve_greeting_for("SMC Stone", explicit="Stone", contact_name=None,
+                                owner_first_name=None, email=None) != "Stone"
+    assert resolve_greeting_for("Larry Domalakes Insurance", explicit=None, contact_name="Larry",
+                                owner_first_name=None, email=None) == "Larry"
+    assert resolve_greeting_for("The Law Office of Nicholas Forrest Colvin", explicit="Nicholas",
+                                contact_name=None, owner_first_name=None, email=None) == "Nicholas"
+    assert first_name_from_full("About Us") is None

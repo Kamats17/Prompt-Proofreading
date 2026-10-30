@@ -102,13 +102,21 @@ def guess_first_name(email: str | None) -> str | None:
         return None
     if not re.fullmatch(r"[a-z]+", first):
         return None
-    # Single-token local: only trust it if it is a recognized first name.
-    # Multi-segment local (mary.smith): the first segment is almost always a name.
-    if len(parts) == 1 and first not in COMMON_FIRST_NAMES:
+    # Only a recognized first name is trusted, multi-segment or not: 'dr.steve67',
+    # 'stone.smcstone' and 'domalakes_ins' put a title, a business word or a surname
+    # first, and "Hi Dr," / "Hi Stone," is worse than "Hi there,".
+    if first not in COMMON_FIRST_NAMES:
         return None
     return first.capitalize()
 
 
+# Words a page or listing puts where a contact name goes ("Associations",
+# "Insurance Policy") that are never someone's first name.
+_NOT_NAMES = {"associations", "association", "associates", "insurance", "policy", "agency",
+              "realty", "estate", "real", "office", "offices", "law", "legal", "dental",
+              "clinic", "services", "company", "group", "partners", "members", "staff",
+              "customer", "client", "clients", "patient", "patients", "contact", "owners",
+              "about", "all", "our", "us", "welcome", "home", "team"}
 _HONORIFICS = {"dr", "mr", "mrs", "ms", "miss", "mx", "the", "chef", "rev", "prof"}
 # A plausible name token: letters (any script), optionally with ' or - inside.
 _NAME_TOKEN = re.compile(r"^[^\W\d_]+(?:['\-][^\W\d_]+)*\.?$")
@@ -164,6 +172,6 @@ def first_name_from_full(full_name: str | None) -> str | None:
     if head in {"mr", "mrs", "ms", "miss", "mx"} and len(rest) == 1:
         return None
     first = rest[0].rstrip(".")
-    if len(first) < 2 or first.lower() in GENERIC_LOCAL_PARTS:
+    if len(first) < 2 or first.lower() in GENERIC_LOCAL_PARTS or first.lower() in _NOT_NAMES:
         return None
     return first[:1].upper() + first[1:].lower()
