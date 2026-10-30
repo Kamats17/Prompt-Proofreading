@@ -113,7 +113,12 @@ def short_name(company: str) -> str:
         if i >= 2 and w.lower() in ("&", "and", "+") and not series:
             words = words[:i]
             break
-    if len(words) > (5 if series else 4):
+    # Connectors don't count toward the cap ('Family & Friend Pet Clinic' stays whole),
+    # and an 'X of Y' name gets five words ('Animal Clinic of Friendly Center'), since
+    # cutting it leaves only the generic half.
+    real = [w for w in words if w.lower() not in _TRAILING_CONNECTORS]
+    has_of = any(w.lower() == "of" for w in words[1:])
+    if len(real) > (5 if series or has_of else 4):
         words = words[:3]
     # Never end on a connector: 'CORTEX Chiropractic &', 'Buttonwood Motel and'.
     while len(words) > 1 and words[-1].lower().strip(",") in _TRAILING_CONNECTORS:
