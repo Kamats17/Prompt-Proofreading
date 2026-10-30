@@ -4,7 +4,7 @@
 {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
 {% for w in compliance %}<div class="banner">{{ w }}</div>{% endfor %}
 <section class="filters">
-  <h1>Review queue <small class="muted">({{ items | length }} pending)</small></h1>
+  <h1>Review queue <small class="muted">({{ total_pending }} pending{% if total_pending > items | length %}, showing the top {{ items | length }}{% endif %})</small></h1>
   <p class="cap">New emails pushed today: <strong>{{ pushed_today }}</strong> / {{ daily_cap }}
     · Keys: <span class="kbd">J</span>/<span class="kbd">K</span> next/previous,
     <span class="kbd">A</span> approve, <span class="kbd">R</span> reject, <span class="kbd">O</span> open lead</p>

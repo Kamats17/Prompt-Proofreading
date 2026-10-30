@@ -122,6 +122,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates) -> None:
         """Review queue: every pending draft with its evidence, one screen each."""
         with closing(_conn()) as conn:
             rows = conn.execute(_QUEUE_ORDER_SQL + " LIMIT 200").fetchall()
+            total = conn.execute("SELECT COUNT(*) FROM drafts WHERE status = 'pending'").fetchone()[0]
             items = []
             for r in rows:
                 d = get_draft(conn, r["id"])
@@ -132,7 +133,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates) -> None:
                               "meta": json.loads(a.meta_json or "{}")})
             pushed_today = first_touch_pushes_today(conn)
         return templates.TemplateResponse(request, "queue.html", {
-            "items": items, "brand": BRAND, "pushed_today": pushed_today,
+            "items": items, "total_pending": total, "brand": BRAND, "pushed_today": pushed_today,
             "daily_cap": DAILY_NEW_CAP, "reject_categories": REJECT_CATEGORIES,
             "compliance": compliance_warnings(), "flash": msg or "",
         })
