@@ -92,17 +92,26 @@ def short_name(company: str) -> str:
     cut = _SHORT_CUT_WORDS.sub("", name).strip(" ,&-")
     cut = re.sub(r"\b(the|family)\s*$", "", cut, flags=re.IGNORECASE).strip(" ,&-")
     cut = re.split(r"\s*(?::|\||\s-\s)\s*", cut)[0].strip(" ,&-")  # 'Hench Law Office: Atherton T'
+    # 'The Law Offices of John K. Costalas' -> 'John K. Costalas';
+    # 'Jeremy Dodgion Attorney at Law' -> 'Jeremy Dodgion'
+    cut = re.sub(r"^(the\s+)?law\s+offices?\s+of\s+", "", cut, flags=re.IGNORECASE)
+    cut = re.sub(r",?\s+attorneys?\s+at\s+law\b.*$", "", cut, flags=re.IGNORECASE).strip(" ,&-")
+    head = cut.split(",")[0].strip()
+    if len(head.split()) >= 2:  # 'P&A Taxes, Accounting, and CPA' -> 'P&A Taxes'
+        cut = head
     words = cut.split()
     if not words or len(cut) < 3:
         words = name.split()
     # Prefer a natural break ('Harry M. Von Sas & Son' -> 'Harry M. Von Sas') and keep
     # a four-word name whole ('North Penn Real Estate'), so a cap never leaves a stub
     # like 'Harry M. Von' or 'North Penn Real'.
+    # A comma-separated series ('Auto, Truck and Fleet Services') is one name: keep it whole.
+    series = any(w.endswith(",") for w in words[:-1])
     for i, w in enumerate(words):
-        if i >= 2 and w.lower() in ("&", "and", "+"):
+        if i >= 2 and w.lower() in ("&", "and", "+") and not series:
             words = words[:i]
             break
-    if len(words) > 4:
+    if len(words) > (5 if series else 4):
         words = words[:3]
     # Never end on a connector: 'CORTEX Chiropractic &', 'Buttonwood Motel and'.
     while len(words) > 1 and words[-1].lower().strip(",") in _TRAILING_CONNECTORS:

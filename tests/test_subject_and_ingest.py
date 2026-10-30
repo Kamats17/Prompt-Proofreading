@@ -86,3 +86,15 @@ def test_short_name_never_leaves_a_stub():
     assert short_name("Allen Hench Law Office: Atherton Timothy N") == "Allen Hench Law Office"
     assert short_name("Gary's Collision & Auto Service") == "Gary's Collision"
     assert short_name("Larry Domalakes Insurance") == "Larry Domalakes Insurance"
+
+
+def test_short_name_drops_law_office_wrappers_and_comma_tails():
+    from app.draft.voice import short_name
+    assert short_name("The Law Offices of John K. Costalas") == "John K. Costalas"
+    assert short_name("Law Office of Richard R. Rodriguez") == "Richard R. Rodriguez"
+    assert short_name("Jeremy Dodgion Attorney at Law") == "Jeremy Dodgion"
+    assert short_name("P&A Taxes, Accounting, and CPA Services") == "P&A Taxes"
+    assert short_name("Animal Hospital of DuBois") == "Animal Hospital of DuBois"
+    assert short_name("Contiguglia Law Offices, LLP") == "Contiguglia Law Offices"
+    assert short_name("Auto, Truck and Fleet Services") == "Auto, Truck and Fleet Services"
+    assert short_name("Kelman, Moses, Seifert & Hartstein") == "Kelman, Moses, Seifert & Hartstein"
