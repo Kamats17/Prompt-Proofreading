@@ -77,3 +77,12 @@ def test_short_name_never_ends_on_a_connector():
     assert short_name("CORTEX Chiropractic & Clinical Neuroscience") == "CORTEX Chiropractic"
     assert short_name("Buttonwood Motel and Restaurant") == "Buttonwood Motel"
     assert short_name("Smith & Jones") == "Smith & Jones"
+
+
+def test_short_name_never_leaves_a_stub():
+    from app.draft.voice import short_name
+    assert short_name("Harry M. Von Sas & Son") == "Harry M. Von Sas"
+    assert short_name("North Penn Real Estate") == "North Penn Real Estate"
+    assert short_name("Allen Hench Law Office: Atherton Timothy N") == "Allen Hench Law Office"
+    assert short_name("Gary's Collision & Auto Service") == "Gary's Collision"
+    assert short_name("Larry Domalakes Insurance") == "Larry Domalakes Insurance"

@@ -91,10 +91,19 @@ def short_name(company: str) -> str:
     name = re.sub(r"\s+", " ", (company or "").strip())
     cut = _SHORT_CUT_WORDS.sub("", name).strip(" ,&-")
     cut = re.sub(r"\b(the|family)\s*$", "", cut, flags=re.IGNORECASE).strip(" ,&-")
+    cut = re.split(r"\s*(?::|\||\s-\s)\s*", cut)[0].strip(" ,&-")  # 'Hench Law Office: Atherton T'
     words = cut.split()
     if not words or len(cut) < 3:
         words = name.split()
-    words = words[:3]
+    # Prefer a natural break ('Harry M. Von Sas & Son' -> 'Harry M. Von Sas') and keep
+    # a four-word name whole ('North Penn Real Estate'), so a cap never leaves a stub
+    # like 'Harry M. Von' or 'North Penn Real'.
+    for i, w in enumerate(words):
+        if i >= 2 and w.lower() in ("&", "and", "+"):
+            words = words[:i]
+            break
+    if len(words) > 4:
+        words = words[:3]
     # Never end on a connector: 'CORTEX Chiropractic &', 'Buttonwood Motel and'.
     while len(words) > 1 and words[-1].lower().strip(",") in _TRAILING_CONNECTORS:
         words.pop()
