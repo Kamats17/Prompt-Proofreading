@@ -104,6 +104,11 @@ PLATFORM_DOMAINS = frozenset({
     "nextdoor.com", "alignable.com", "chamberofcommerce.com", "thumbtack.com", "angi.com",
     "angieslist.com", "houzz.com", "homeadvisor.com", "groupon.com", "superpages.com",
     "citysearch.com", "hotfrog.com", "merchantcircle.com", "birdeye.com", "porch.com",
+    "dexknows.com", "bizapedia.com", "buildzoom.com", "expertise.com", "opencorporates.com",
+    # health / legal / auto directories (local-services prospecting)
+    "healthgrades.com", "vitals.com", "webmd.com", "ratemds.com", "sharecare.com",
+    "avvo.com", "justia.com", "findlaw.com", "lawyers.com", "martindale.com",
+    "repairpal.com", "mechanicadvisor.com", "carfax.com",
 })
 
 # Subdomain-style aggregators where ANY subdomain on the apex is aggregator-hosted.

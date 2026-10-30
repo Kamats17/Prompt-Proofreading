@@ -2,9 +2,9 @@
 
 Safe on fresh DBs and on every older layout of this project's DB:
   - plain new columns are added with ALTER TABLE ADD COLUMN;
-  - the drafts table is rebuilt (copy -> drop -> rename, data preserved) whenever
-    its status CHECK constraint is older than the current one, because SQLite
-    cannot ALTER a CHECK constraint in place;
+  - the drafts and prospects tables are rebuilt (copy -> drop -> rename, data
+    preserved) whenever their CHECK constraint is older than the current one,
+    because SQLite cannot ALTER a CHECK constraint in place;
   - indexes that depend on migrated columns are created here, after backfill.
 """
 import re
@@ -34,9 +34,10 @@ _AUDIT_ADDED_COLUMNS = {
     "meta_json": "TEXT",
 }
 
-# Marker proving the drafts table has the current status CHECK. Bump this when
-# the status list in schema.sql changes.
-_DRAFTS_SCHEMA_MARKER = "'bounced'"
+# Markers proving a table has its current CHECK constraint. Bump one when the
+# matching list in schema.sql changes.
+_DRAFTS_SCHEMA_MARKER = "'bounced'"     # drafts.status
+_PROSPECTS_SCHEMA_MARKER = "'osm'"      # prospects.source
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
@@ -58,32 +59,32 @@ def _add_missing_columns(conn: sqlite3.Connection, table: str, wanted: dict[str,
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
 
 
-def _drafts_create_sql(schema_text: str) -> str:
-    m = re.search(r"CREATE TABLE IF NOT EXISTS drafts \((.*?)\n\);", schema_text, re.S)
+def _create_sql(schema_text: str, table: str) -> str:
+    m = re.search(rf"CREATE TABLE IF NOT EXISTS {table} \((.*?)\n\);", schema_text, re.S)
     if not m:
-        raise RuntimeError("schema.sql: drafts table definition not found")
-    return "CREATE TABLE drafts_new (" + m.group(1) + "\n);"
+        raise RuntimeError(f"schema.sql: {table} table definition not found")
+    return f"CREATE TABLE {table}_new (" + m.group(1) + "\n);"
 
 
-def _rebuild_drafts_if_stale(conn: sqlite3.Connection, schema_text: str) -> bool:
-    """Rebuild drafts with the current definition, preserving every row.
+def _rebuild_if_stale(conn: sqlite3.Connection, schema_text: str, table: str, marker: str) -> bool:
+    """Rebuild `table` with the current definition, preserving every row.
     Returns True if a rebuild happened. Caller must have foreign_keys OFF."""
     row = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='drafts'"
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
     ).fetchone()
     if not row:
         return False
-    if _DRAFTS_SCHEMA_MARKER in (row[0] or ""):
+    if marker in (row[0] or ""):
         return False
-    old_cols = _columns(conn, "drafts")
-    conn.execute("DROP TABLE IF EXISTS drafts_new")
-    conn.execute(_drafts_create_sql(schema_text))
-    new_cols = _columns(conn, "drafts_new")
+    old_cols = _columns(conn, table)
+    conn.execute(f"DROP TABLE IF EXISTS {table}_new")
+    conn.execute(_create_sql(schema_text, table))
+    new_cols = _columns(conn, f"{table}_new")
     shared = [c for c in old_cols if c in new_cols]
     col_list = ", ".join(shared)
-    conn.execute(f"INSERT INTO drafts_new ({col_list}) SELECT {col_list} FROM drafts")
-    conn.execute("DROP TABLE drafts")
-    conn.execute("ALTER TABLE drafts_new RENAME TO drafts")
+    conn.execute(f"INSERT INTO {table}_new ({col_list}) SELECT {col_list} FROM {table}")
+    conn.execute(f"DROP TABLE {table}")
+    conn.execute(f"ALTER TABLE {table}_new RENAME TO {table}")
     return True
 
 
@@ -113,8 +114,10 @@ def migrate(db_path: str | Path) -> None:
         # FK enforcement must be OFF while the drafts table is swapped out.
         conn.execute("PRAGMA foreign_keys = OFF")
         conn.execute("BEGIN")
-        _rebuild_drafts_if_stale(conn, schema_text)
+        _rebuild_if_stale(conn, schema_text, "drafts", _DRAFTS_SCHEMA_MARKER)
+        # Columns first: the rebuild copies only the columns both versions share.
         _add_missing_columns(conn, "prospects", _PROSPECT_ADDED_COLUMNS)
+        _rebuild_if_stale(conn, schema_text, "prospects", _PROSPECTS_SCHEMA_MARKER)
         _add_missing_columns(conn, "audits", _AUDIT_ADDED_COLUMNS)
         _add_missing_columns(conn, "drafts", _DRAFT_ADDED_COLUMNS)
         conn.execute("COMMIT")

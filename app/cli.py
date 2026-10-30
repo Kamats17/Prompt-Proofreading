@@ -256,6 +256,36 @@ def cmd_batch(args):
     _out(f"Stopped: {st['stopped']}")
 
 
+def cmd_prospect(args):
+    from app.sources.from_osm import CATEGORIES, DEFAULT_TYPES
+    from app.sources.prospector import prospect_area
+    if args.list_types:
+        _out("types: " + ", ".join(sorted(CATEGORIES)))
+        _out("default: " + ", ".join(DEFAULT_TYPES))
+        return
+    if not args.area or not args.state:
+        _out("give --area (county or town, repeatable) and --state (two letters)")
+        sys.exit(2)
+    conn = _ensure_db()
+    types = [t.strip() for t in args.types.split(",")] if args.types else None
+    totals: dict = {}
+    for area in args.area:
+        try:
+            st = prospect_area(conn, area=area, state=args.state, types=types,
+                               min_stale=args.min_stale, log=_out,
+                               sources=tuple(s.strip() for s in args.sources.split(",")))
+        except (RuntimeError, ValueError) as e:
+            _out(f"{area}: {e}")
+            continue
+        for k, v in st.items():
+            totals[k] = totals.get(k, 0) + v
+    _out("")
+    _out(f"NEW LEADS: {totals.get('lead', 0)} (old site + email) · call list: "
+         f"{totals.get('call_list', 0)} (old site, no email) · skipped: "
+         f"{totals.get('looks_current', 0)} look current, {totals.get('dead_or_moved', 0)} dead/moved, "
+         f"{totals.get('already_known', 0)} already known, {totals.get('chain', 0)} chains")
+
+
 def cmd_audit(args):
     conn = _ensure_db()
     if args.prospect_id:
@@ -612,6 +642,18 @@ def build_parser() -> argparse.ArgumentParser:
     bat.add_argument("drafts", type=int, nargs="?", default=15)
     bat.add_argument("--max-audits", type=int, default=150,
                      help="stop after trying this many leads even if short of the target")
+
+    pro = sub.add_parser("prospect", help="find local businesses with old websites")
+    pro.set_defaults(func=cmd_prospect)
+    pro.add_argument("--area", action="append",
+                     help='county or town name as on the map, e.g. "Blair County" (repeatable)')
+    pro.add_argument("--state", help="two-letter state, e.g. PA")
+    pro.add_argument("--types", help="comma list of business types (default: high-ticket local services)")
+    pro.add_argument("--min-stale", type=int, default=3,
+                     help="signs of an old site needed to keep a lead (default 3)")
+    pro.add_argument("--sources", default="osm,web",
+                     help="osm (map data, free) and/or web (Claude web search); default both")
+    pro.add_argument("--list-types", action="store_true")
 
     dly = sub.add_parser("daily", help="sync -> follow-ups -> audit+draft until N ready -> summary")
     dly.set_defaults(func=cmd_daily)

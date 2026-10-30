@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS prospects (
     email_source        TEXT,
     contact_name        TEXT,
     phone               TEXT,
-    source              TEXT NOT NULL CHECK (source IN ('master_csv', 'xlsx', 'node_discovery', 'manual')),
+    source              TEXT NOT NULL CHECK (source IN ('master_csv', 'xlsx', 'node_discovery', 'manual', 'osm')),
     node_rating         TEXT CHECK (node_rating IN ('A', 'B', 'C', 'Reject') OR node_rating IS NULL),
     node_issues_json    TEXT,
     blocked_reason      TEXT,

@@ -10,6 +10,8 @@ Returns the concatenated assistant text. Calls are sync from the caller's POV
 Isolation: the CLI is started with NO tools, NO user/project settings and NO MCP
 servers. Scraped page text is untrusted input; with tools disabled a prompt
 injection inside a prospect's homepage can't make the model act on your machine.
+The one exception is lead discovery, which may enable WebSearch only: a
+server-side search that cannot touch this machine.
 """
 from __future__ import annotations
 import asyncio
@@ -53,15 +55,20 @@ def _classify(text: str) -> str:
     return "other"
 
 
+_ALLOWED_TOOLS = {"WebSearch"}
+
+
 async def _query_text(*, system: str, user: str, model: Optional[str] = None,
-                      max_turns: int = 1) -> str:
+                      max_turns: int = 1, tools: tuple[str, ...] = ()) -> str:
     """Run one query, collect all assistant text, return concatenated string."""
     text_parts: list[str] = []
     stderr_lines: list[str] = []
+    if set(tools) - _ALLOWED_TOOLS:
+        raise ValueError(f"only {sorted(_ALLOWED_TOOLS)} may be enabled, got {tools}")
     options = ClaudeAgentOptions(
         system_prompt=system,
-        tools=[],                 # no built-in tools at all (not merely "none allowed")
-        allowed_tools=[],
+        tools=list(tools),        # none by default (not merely "none allowed")
+        allowed_tools=list(tools),
         setting_sources=[],       # ignore ~/.claude settings, CLAUDE.md, hooks
         mcp_servers={},           # no MCP servers
         max_turns=max_turns,
@@ -99,7 +106,9 @@ async def _query_text(*, system: str, user: str, model: Optional[str] = None,
 
 
 @retry_api(attempts=3, base_delay=2.0)
-def call_claude(*, system: str, user: str, model: Optional[str] = None) -> str:
+def call_claude(*, system: str, user: str, model: Optional[str] = None,
+                tools: tuple[str, ...] = (), max_turns: int = 1,
+                timeout_s: int = CALL_TIMEOUT_S) -> str:
     """Sync entry point. Runs the async query in a fresh event loop.
 
     Safe to call from FastAPI handlers via `asyncio.to_thread(call_claude, ...)`.
@@ -120,12 +129,13 @@ def call_claude(*, system: str, user: str, model: Optional[str] = None) -> str:
     try:
         return asyncio.run(
             asyncio.wait_for(
-                _query_text(system=system, user=user, model=model),
-                timeout=CALL_TIMEOUT_S,
+                _query_text(system=system, user=user, model=model,
+                            max_turns=max_turns, tools=tools),
+                timeout=timeout_s,
             )
         )
     except asyncio.TimeoutError as e:
-        raise ClaudeCallError(f"timed out after {CALL_TIMEOUT_S}s", "timeout") from e
+        raise ClaudeCallError(f"timed out after {timeout_s}s", "timeout") from e
 
 
 def probe(model: Optional[str] = None) -> tuple[bool, str]:
