@@ -421,7 +421,11 @@ FREE_MAIL_DOMAINS = {
     "me.com", "msn.com", "live.com", "comcast.net", "att.net", "sbcglobal.net",
     "verizon.net", "bellsouth.net", "cox.net", "charter.net", "ymail.com", "protonmail.com",
 }
-_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+# Starts only at the beginning of a run and caps each part, so a long blob of
+# email-like characters (inline base64, minified data) is scanned once, not
+# once per character: the unbounded pattern took ~2 minutes on one 800 KB page.
+_EMAIL_RE = re.compile(r"(?<![a-zA-Z0-9._%+\-])[a-zA-Z0-9._%+\-]{1,64}"
+                       r"@[a-zA-Z0-9.\-]{1,253}\.[a-zA-Z]{2,24}")
 _EMAIL_BLOCKLIST_SUBSTR = (
     "example.", "sentry", "wixpress", "godaddy", "yourdomain", "domain.com",
     "email.com", "yoursite", "test@", "user@", "name@", "@2x", "@3x",
