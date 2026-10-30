@@ -81,6 +81,7 @@ def url_hits(body_text: str) -> list[str]:
 _SHORT_CUT_WORDS = re.compile(
     r"\b(restaurant|restaurants|family restaurant|bar\s*&\s*grill|&\s*bar|and bar|grill|"
     r"cafe|café|diner|llc|inc|co\.?|company|ltd|pllc|dds|pc)\b.*$", re.IGNORECASE)
+_TRAILING_CONNECTORS = {"&", "and", "of", "the", "at", "on", "in", "for", "-", "+", "/"}
 
 
 def short_name(company: str) -> str:
@@ -93,7 +94,11 @@ def short_name(company: str) -> str:
     words = cut.split()
     if not words or len(cut) < 3:
         words = name.split()
-    return " ".join(words[:3])
+    words = words[:3]
+    # Never end on a connector: 'CORTEX Chiropractic &', 'Buttonwood Motel and'.
+    while len(words) > 1 and words[-1].lower().strip(",") in _TRAILING_CONNECTORS:
+        words.pop()
+    return " ".join(words)
 
 
 def possessive(name: str) -> str:

@@ -12,7 +12,7 @@ def test_short_name():
     assert short_name("Riverside Family Restaurant") == "Riverside"
     assert short_name("Frank's Diner") == "Frank's"
     assert short_name("Cafe") == "Cafe"            # never trims to nothing
-    assert short_name("Smith Plumbing and Heating Services LLC") == "Smith Plumbing and"
+    assert short_name("Smith Plumbing and Heating Services LLC") == "Smith Plumbing"
 
 
 def test_subject_names_the_finding():
@@ -70,3 +70,10 @@ def test_contact_names():
     assert first_name_from_full("Dr. James Schmitt") == "Dr. Schmitt"
     assert first_name_from_full("Mrs Smith") is None
     assert first_name_from_full("Mr. John Smith") == "John"
+
+
+def test_short_name_never_ends_on_a_connector():
+    from app.draft.voice import short_name
+    assert short_name("CORTEX Chiropractic & Clinical Neuroscience") == "CORTEX Chiropractic"
+    assert short_name("Buttonwood Motel and Restaurant") == "Buttonwood Motel"
+    assert short_name("Smith & Jones") == "Smith & Jones"
