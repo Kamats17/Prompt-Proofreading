@@ -15,7 +15,7 @@ from urllib3.exceptions import InsecureRequestWarning
 
 from app.audit.extractor import (
     choose_contact_email, dead_site_reason, domain_names_business, extract_emails,
-    extract_features, today_year,
+    extract_features, identity_mismatch_reason, today_year,
 )
 from app.settings import CACHE_DIR as _CACHE_ROOT
 from app.sources._normalize import registered_domain
@@ -118,8 +118,9 @@ def prescreen(url: str, company: str | None = None) -> dict:
     if not features.get("ok"):
         return {"ok": False, "error": features.get("error", "unreadable page"), "url": url}
     dead, _ = dead_site_reason(features)
-    if dead:
-        return {"ok": False, "error": dead, "url": url}
+    not_theirs = dead or identity_mismatch_reason(features, company)
+    if not_theirs:
+        return {"ok": False, "error": not_theirs, "url": url}
 
     candidates = extract_emails(path)
     email, source = choose_contact_email(candidates, final_url, company=company)

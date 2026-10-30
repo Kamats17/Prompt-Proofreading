@@ -184,3 +184,16 @@ def test_sources_merge_one_per_domain(monkeypatch):
          {"company": "Barton's", "url": "https://bartonsplumbingandheating.com"}], {"web_found": 2}))
     cands, st = prospector.discover("Blair County", "PA", ["plumber"], ("osm", "web"), log=lambda m: None)
     assert [c["company"] for c in cands] == ["Kimmen Plumbing & Heating", "Barton's"]
+
+
+def test_prescreen_rejects_hijacked_domain(monkeypatch, tmp_path):
+    from app.sources import prescreen as ps
+
+    class R:
+        status_code, url = 200, "https://lancasterdentalarts.com/"
+        text = ("<html><head><title>Buy cialis online cheap</title></head><body>"
+                + "<p>cialis viagra casino slot togel online pharmacy</p>" * 20 + "</body></html>")
+    monkeypatch.setattr(ps, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(ps, "_get", lambda url: (R(), False, None))
+    res = ps.prescreen("https://lancasterdentalarts.com", "Lancaster Dental Arts")
+    assert not res["ok"] and "hijacked" in res["error"]
