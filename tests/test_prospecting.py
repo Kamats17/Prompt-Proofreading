@@ -89,7 +89,13 @@ def test_every_category_label_counts_as_high_ticket():
 def test_query_is_scoped_to_the_state():
     q = from_osm.build_query("Blair County", "pa", ["dentist", "hvac"])
     assert 'area["ISO3166-2"="US-PA"]' in q and '"name"="Blair County"' in q
-    assert 'nwr["amenity"~"^dentist$"](area.a);' in q and 'nwr["craft"~"^hvac$"](area.a);' in q
+    assert 'nwr["amenity"~"^dentist$"][~"^(website|contact:website|url)$"~"."](area.a);' in q
+    assert 'nwr["craft"~"^hvac$"]' in q
+
+
+def test_statewide_query_has_no_county_filter():
+    q = from_osm.build_query(from_osm.STATEWIDE, "oh", ["plumber"])
+    assert 'area["ISO3166-2"="US-OH"]->.a;' in q and "boundary" not in q
 
 
 CAND = {"company": "Joe's Plumbing", "url": "http://joesplumbing.com", "industry": "Plumber",
@@ -197,3 +203,14 @@ def test_prescreen_rejects_hijacked_domain(monkeypatch, tmp_path):
     monkeypatch.setattr(ps, "_get", lambda url: (R(), False, None))
     res = ps.prescreen("https://lancasterdentalarts.com", "Lancaster Dental Arts")
     assert not res["ok"] and "hijacked" in res["error"]
+
+
+def test_audit_shards_split_leads_without_overlap(conn):
+    from app.cli import _next_audit_rows
+    for n in range(6):
+        conn.execute("INSERT INTO prospects (company, url, source, email) VALUES (?, ?, 'osm', ?)",
+                     (f"Biz {n}", f"https://biz{n}.com", f"a@biz{n}.com"))
+    conn.commit()
+    shards = [{r["id"] for r in _next_audit_rows(conn, 10, (i, 3))} for i in range(3)]
+    assert all(len(s) == 2 for s in shards)
+    assert set().union(*shards) == {r["id"] for r in _next_audit_rows(conn, 10)}

@@ -25,6 +25,7 @@ from app.sources.prescreen import CACHE_DIR, prescreen
 
 SEEN_PATH = CACHE_DIR / "seen.json"
 DEFAULT_MIN_STALE = 3
+OUTCOMES = ("lead", "call_list", "looks_current", "dead_or_moved", "no_contact")
 
 
 def _load_seen() -> dict:
@@ -102,8 +103,7 @@ def prospect_area(conn: sqlite3.Connection, *, area: str, state: str,
     fresh = [c for c in cands
              if registered_domain(c["url"]) not in known and registered_domain(c["url"]) not in seen]
     stats.update({"with_site": len(cands), "already_known": len(cands) - len(fresh),
-                  "lead": 0, "call_list": 0, "looks_current": 0, "dead_or_moved": 0,
-                  "no_contact": 0})
+                  **{k: 0 for k in OUTCOMES}})
     log(f"{area}, {state}: {len(cands)} independent businesses with a site, "
         f"{len(fresh)} new to check")
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -121,5 +121,7 @@ def prospect_area(conn: sqlite3.Connection, *, area: str, state: str,
             if outcome in ("lead", "call_list"):
                 log(f"  + {cand['company']} ({cand.get('industry')}) -> {outcome}: "
                     f"{'; '.join(res['why'])}")
+            if sum(stats[k] for k in OUTCOMES) % 200 == 0:  # statewide runs are long
+                _save_seen(seen)
     _save_seen(seen)
     return stats

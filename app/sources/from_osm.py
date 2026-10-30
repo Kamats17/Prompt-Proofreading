@@ -38,6 +38,12 @@ CATEGORIES: dict[str, tuple[str, str, str]] = {
     "insurance": ("office", "^insurance$", "Insurance Agency"),
     "realtor": ("office", "^estate_agent$", "Realtor"),
     "auto": ("shop", "^(car_repair|tyres)$", "Auto Repair"),
+    "doctor": ("amenity", "^doctors$", "Medical Practice"),
+    "podiatrist": ("healthcare", "^podiatrist$", "Podiatry Clinic"),
+    "audiologist": ("healthcare", "^(audiologist|hearing_care)$", "Hearing Clinic"),
+    "counselor": ("healthcare", "^psychotherapist$", "Counseling Clinic"),
+    "floorer": ("craft", "^(floorer|tiler)$", "Flooring Contractor"),
+    "kitchen": ("shop", "^(kitchen|bathroom_furnishing)$", "Kitchen and Bath Remodel"),
 }
 DEFAULT_TYPES = ("dentist", "chiropractor", "physio", "optometrist", "veterinary",
                  "plumber", "hvac", "electrician", "roofer", "builder", "landscaper",
@@ -46,14 +52,23 @@ DEFAULT_TYPES = ("dentist", "chiropractor", "physio", "optometrist", "veterinary
 _CHAIN_PATH_WORDS = ("/locations", "/location/", "/store/", "/stores/", "/offices/", "/branch")
 
 
+STATEWIDE = "ALL"
+_HAS_SITE = '[~"^(website|contact:website|url)$"~"."]'
+
+
 def build_query(area: str, state: str, types: list[str]) -> str:
-    """Overpass QL for every business of `types` inside the named county or town
-    in `state` (two-letter code). `area` matches any admin boundary by name."""
+    """Overpass QL for every business of `types` that lists a website, inside the
+    named county or town in `state` (two-letter code). `area` matches any admin
+    boundary by name; STATEWIDE searches the whole state."""
     parts = []
     for t in types:
         key, rx, _ = CATEGORIES[t]
-        parts.append(f'nwr["{key}"~"{rx}"](area.a);')
-    return (f'[out:json][timeout:180];'
+        parts.append(f'nwr["{key}"~"{rx}"]{_HAS_SITE}(area.a);')
+    if area == STATEWIDE:
+        return (f'[out:json][timeout:300];'
+                f'area["ISO3166-2"="US-{state.upper()}"]->.a;'
+                f'({"".join(parts)});out tags;')
+    return (f'[out:json][timeout:300];'
             f'area["ISO3166-2"="US-{state.upper()}"]->.st;'
             f'rel["boundary"="administrative"]["name"="{area}"](area.st);'
             f'map_to_area->.a;'
@@ -67,7 +82,7 @@ def fetch_overpass(query: str, *, attempts: int = 6) -> list[dict]:
     for i in range(attempts):
         ep = ENDPOINTS[i % len(ENDPOINTS)]
         try:
-            r = requests.post(ep, data={"data": query}, headers={"User-Agent": UA}, timeout=200)
+            r = requests.post(ep, data={"data": query}, headers={"User-Agent": UA}, timeout=330)
             if r.status_code == 200:
                 return r.json().get("elements", [])
             last = f"{ep}: http {r.status_code}"

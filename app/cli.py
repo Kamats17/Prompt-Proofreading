@@ -85,10 +85,14 @@ def cmd_ingest(args):
 
 # ---- audit / draft (bulk-safe) ---------------------------------------------------
 
-def _next_audit_rows(conn, limit: int) -> list:
+def _next_audit_rows(conn, limit: int, shard: tuple[int, int] = (0, 1)) -> list:
+    """Next leads to audit. `shard` (i, n) takes only ids with id % n == i, so n
+    batch processes can audit side by side without picking the same lead."""
+    i, n = shard
     return conn.execute(
         f"""SELECT p.id, p.company FROM prospects p
             WHERE NOT EXISTS (SELECT 1 FROM audits a WHERE a.prospect_id = p.id)
+              AND p.id % {int(n)} = {int(i)}
               AND p.blocked_reason IS NULL
               AND (p.node_rating IN ('A', 'B') OR p.node_rating IS NULL)
               AND p.audit_attempts < {MAX_AUDIT_ATTEMPTS}
@@ -187,7 +191,8 @@ def run_bulk_draft(conn, *, grades: tuple[str, ...], limit: int, allow_no_email:
     return stats
 
 
-def run_until_drafts(conn, *, target: int, max_audits: int, quiet: bool = False) -> dict:
+def run_until_drafts(conn, *, target: int, max_audits: int, quiet: bool = False,
+                     shard: tuple[int, int] = (0, 1)) -> dict:
     """Keep auditing the next lead and drafting every A/B result until `target`
     drafts pass QA, the lead list runs out, or `max_audits` leads were tried.
 
@@ -198,7 +203,8 @@ def run_until_drafts(conn, *, target: int, max_audits: int, quiet: bool = False)
     from app.draft.pipeline import draft_for_prospect
     stats = {"target": target, "ready": 0, "needs_edits": 0, "tried": 0, "audited": 0,
              "blocked": 0, "failed": 0, "grades": {}, "stopped": ""}
-    left = run_bulk_draft(conn, grades=("A", "B"), limit=target, quiet=True)
+    left = (run_bulk_draft(conn, grades=("A", "B"), limit=target, quiet=True) if shard[0] == 0
+            else {"qa_pass": 0, "drafted": 0})
     stats["ready"] += left["qa_pass"]
     stats["needs_edits"] += left["drafted"] - left["qa_pass"]
     if left.get("aborted"):
@@ -210,7 +216,7 @@ def run_until_drafts(conn, *, target: int, max_audits: int, quiet: bool = False)
         if stats["tried"] >= max_audits:
             stats["stopped"] = f"tried {max_audits} leads (raise --max-audits to keep going)"
             break
-        rows = _next_audit_rows(conn, 1)
+        rows = _next_audit_rows(conn, 1, shard)
         if not rows:
             stats["stopped"] = "no more leads to audit: ingest more leads"
             break
@@ -220,6 +226,16 @@ def run_until_drafts(conn, *, target: int, max_audits: int, quiet: bool = False)
         if res.get("error_kind") == "auth":
             stats["stopped"] = "Claude login expired - run `claude auth login` in a terminal"
             _out(f"STOPPED: {stats['stopped']}")
+            break
+        if res.get("error_kind") == "rate_limit":
+            # Not the lead's fault: undo the failure so it is retried, not cooled down 24h.
+            from app.db.repo import clear_audit_failure
+            clear_audit_failure(conn, r["id"])
+            conn.execute("UPDATE prospects SET audit_attempts = MAX(0, audit_attempts - 1) "
+                         "WHERE id = ?", (r["id"],))
+            conn.commit()
+            stats["stopped"] = "rate_limit"
+            _out("STOPPED: Claude usage limit reached; try again later")
             break
         if res.get("ok") and res.get("final_grade") in ("A", "B"):
             try:
@@ -238,6 +254,10 @@ def run_until_drafts(conn, *, target: int, max_audits: int, quiet: bool = False)
                 stats["stopped"] = "Claude login expired - run `claude auth login` in a terminal"
                 _out(f"STOPPED: {stats['stopped']}")
                 break
+            if d.get("error_kind") == "rate_limit":  # audit kept; drafted on the next run
+                stats["stopped"] = "rate_limit"
+                _out("STOPPED: Claude usage limit reached; try again later")
+                break
         if not quiet:
             _out(f"  [{stats['ready']}/{target}] #{r['id']} {r['company']} -> {outcome}"[:240])
     if stats["ready"] >= target:
@@ -248,7 +268,9 @@ def run_until_drafts(conn, *, target: int, max_audits: int, quiet: bool = False)
 def cmd_batch(args):
     conn = _ensure_db()
     _out(f"Working until {args.drafts} drafts are ready to review (up to {args.max_audits} leads)...")
-    st = run_until_drafts(conn, target=args.drafts, max_audits=args.max_audits)
+    i, _, n = (args.shard or "0/1").partition("/")
+    st = run_until_drafts(conn, target=args.drafts, max_audits=args.max_audits,
+                          shard=(int(i), int(n)))
     _out("")
     _out(f"READY TO REVIEW: {st['ready']} of {st['target']} · needing edits: {st['needs_edits']} "
          f"· leads tried: {st['tried']} (blocked {st['blocked']}, errors {st['failed']}, "
@@ -263,16 +285,18 @@ def cmd_prospect(args):
         _out("types: " + ", ".join(sorted(CATEGORIES)))
         _out("default: " + ", ".join(DEFAULT_TYPES))
         return
-    if not args.area or not args.state:
-        _out("give --area (county or town, repeatable) and --state (two letters)")
+    if not args.state or not (args.area or args.statewide):
+        _out("give --state (two letters) and --area (county or town, repeatable) or --statewide")
         sys.exit(2)
+    from app.sources.from_osm import STATEWIDE
+    areas = [STATEWIDE] if args.statewide else args.area
     conn = _ensure_db()
     types = [t.strip() for t in args.types.split(",")] if args.types else None
     totals: dict = {}
-    for area in args.area:
+    for area in areas:
         try:
             st = prospect_area(conn, area=area, state=args.state, types=types,
-                               min_stale=args.min_stale, log=_out,
+                               min_stale=args.min_stale, log=_out, workers=args.workers,
                                sources=tuple(s.strip() for s in args.sources.split(",")))
         except (RuntimeError, ValueError) as e:
             _out(f"{area}: {e}")
@@ -642,6 +666,7 @@ def build_parser() -> argparse.ArgumentParser:
     bat.add_argument("drafts", type=int, nargs="?", default=15)
     bat.add_argument("--max-audits", type=int, default=150,
                      help="stop after trying this many leads even if short of the target")
+    bat.add_argument("--shard", help="i/n: audit only lead ids with id %% n == i (run n in parallel)")
 
     pro = sub.add_parser("prospect", help="find local businesses with old websites")
     pro.set_defaults(func=cmd_prospect)
@@ -653,6 +678,9 @@ def build_parser() -> argparse.ArgumentParser:
                      help="signs of an old site needed to keep a lead (default 3)")
     pro.add_argument("--sources", default="osm,web",
                      help="osm (map data, free) and/or web (Claude web search); default both")
+    pro.add_argument("--statewide", action="store_true",
+                     help="search the whole state (map data only; use --sources osm)")
+    pro.add_argument("--workers", type=int, default=8, help="sites checked at once (default 8)")
     pro.add_argument("--list-types", action="store_true")
 
     dly = sub.add_parser("daily", help="sync -> follow-ups -> audit+draft until N ready -> summary")
