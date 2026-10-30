@@ -223,3 +223,14 @@ def test_colleges_and_government_are_not_prospects(conn):
     res2 = {"ok": True, "email": "clerk@altoonapa.gov", "stale": 6, "why": []}
     assert ingest_screened(conn, CAND, res2) == "institution"
     assert conn.execute("SELECT COUNT(*) FROM prospects").fetchone()[0] == 0
+
+
+def test_web_designer_free_mail_is_not_the_owner():
+    from app.audit.extractor import choose_contact_email
+    email, why = choose_contact_email(["jonpinhorn.typedesign@gmail.com"],
+                                      "https://stallerfamilypractice.com", company="Staller Family Practice")
+    assert email is None
+    assert choose_contact_email(["gravitadesigns@gmail.com"], "https://gravita.com",
+                                company="Gravita Designs")[0] == "gravitadesigns@gmail.com"
+    assert choose_contact_email(["smithplumbing@gmail.com"], "https://smithplumbing.com",
+                                company="Smith Plumbing")[0] == "smithplumbing@gmail.com"

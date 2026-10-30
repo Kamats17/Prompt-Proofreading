@@ -98,3 +98,5 @@ def test_short_name_drops_law_office_wrappers_and_comma_tails():
     assert short_name("Contiguglia Law Offices, LLP") == "Contiguglia Law Offices"
     assert short_name("Auto, Truck and Fleet Services") == "Auto, Truck and Fleet Services"
     assert short_name("Kelman, Moses, Seifert & Hartstein") == "Kelman, Moses, Seifert & Hartstein"
+    assert short_name("Norman Kwai Wing Wong Law Office") == "Norman Kwai Wing Wong"
+    assert short_name("Brent Law Firm, P.C.") == "Brent Law Firm"

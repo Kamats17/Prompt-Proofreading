@@ -96,6 +96,8 @@ def short_name(company: str) -> str:
     # 'Jeremy Dodgion Attorney at Law' -> 'Jeremy Dodgion'
     cut = re.sub(r"^(the\s+)?law\s+offices?\s+of\s+", "", cut, flags=re.IGNORECASE)
     cut = re.sub(r",?\s+attorneys?\s+at\s+law\b.*$", "", cut, flags=re.IGNORECASE).strip(" ,&-")
+    if len(cut.split()) > 4:  # 'Norman Kwai Wing Wong Law Office' -> 'Norman Kwai Wing Wong'
+        cut = re.sub(r"\s+law\s+(offices?|firm)$", "", cut, flags=re.IGNORECASE)
     head = cut.split(",")[0].strip()
     if len(head.split()) >= 2:  # 'P&A Taxes, Accounting, and CPA' -> 'P&A Taxes'
         cut = head

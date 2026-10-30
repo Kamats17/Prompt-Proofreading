@@ -475,6 +475,19 @@ def domain_names_business(domain: str, company: str | None) -> bool:
     return any(len(t) >= 4 and t in label for t in _name_tokens(company))
 
 
+_VENDOR_MAILBOX_RE = re.compile(r"design|webs?\b|webmaster|media|marketing|seo|studio|creative|"
+                                r"digital|graphic|hosting|agency")
+
+
+def is_vendor_mailbox(email: str, company: str | None) -> bool:
+    """A free-mail address whose name says web designer ('jon.typedesign@gmail.com'
+    on a family practice site) belongs to whoever built the site, not the owner,
+    unless the business itself is in that line ('Gravita Designs')."""
+    local = email.split("@", 1)[0].lower()
+    m = _VENDOR_MAILBOX_RE.search(local)
+    return bool(m) and m.group(0).rstrip("s") not in (company or "").lower()
+
+
 def choose_contact_email(candidates: list[str], prospect_url: str,
                          exclude_domains: list[str] | None = None,
                          company: str | None = None) -> tuple[str | None, str]:
@@ -498,6 +511,7 @@ def choose_contact_email(candidates: list[str], prospect_url: str,
         return named[0], "harvested_name_domain"
     free = [e for e in candidates if e.split("@", 1)[1] in FREE_MAIL_DOMAINS
             and not re.search(r"\.(com|net|org|io|co)\b", e.split("@", 1)[0])
+            and not is_vendor_mailbox(e, company)
             and registered_domain(e.split("@", 1)[1]) not in excluded]
     if free:
         return free[0], "harvested_free_mail"
