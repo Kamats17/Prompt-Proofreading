@@ -13,9 +13,11 @@ Every site checked is remembered in prescreen/seen.json, so re-running an area
 or an overlapping one never fetches the same site twice.
 """
 import json
+import re
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
+from urllib.parse import urlparse
 
 from app.db.models import Prospect
 from app.db.repo import mark_prospect_blocked, upsert_prospect
@@ -25,7 +27,17 @@ from app.sources.prescreen import CACHE_DIR, prescreen
 
 SEEN_PATH = CACHE_DIR / "seen.json"
 DEFAULT_MIN_STALE = 3
-OUTCOMES = ("lead", "call_list", "looks_current", "dead_or_moved", "no_contact")
+OUTCOMES = ("lead", "call_list", "looks_current", "dead_or_moved", "no_contact", "institution")
+# Colleges, schools and government offices are mapped like clinics and offices
+# but are not small businesses that buy a website.
+_INSTITUTION_RE = re.compile(r"\.(edu|gov|mil)$|\.k12\.[a-z]{2}\.us$|\.(state|co|ci)\.[a-z]{2}\.us$")
+
+
+def is_institution(url: str, email: str | None = None) -> bool:
+    hosts = [(urlparse(url).hostname or "").lower()]
+    if email and "@" in email:
+        hosts.append(email.rsplit("@", 1)[1].lower())
+    return any(_INSTITUTION_RE.search(h) for h in hosts)
 
 
 def _load_seen() -> dict:
@@ -49,6 +61,8 @@ def ingest_screened(conn: sqlite3.Connection, cand: dict, res: dict, *,
     """Store one prescreened candidate. Returns the outcome key."""
     if not res.get("ok"):
         return "dead_or_moved"
+    if is_institution(res.get("final_url") or cand["url"], res.get("email")):
+        return "institution"
     if res["stale"] < min_stale:
         return "looks_current"
     phone = cand.get("phone") or res.get("phone")

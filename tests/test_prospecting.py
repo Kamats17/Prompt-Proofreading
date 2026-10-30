@@ -214,3 +214,12 @@ def test_audit_shards_split_leads_without_overlap(conn):
     shards = [{r["id"] for r in _next_audit_rows(conn, 10, (i, 3))} for i in range(3)]
     assert all(len(s) == 2 for s in shards)
     assert set().union(*shards) == {r["id"] for r in _next_audit_rows(conn, 10)}
+
+
+def test_colleges_and_government_are_not_prospects(conn):
+    res = {"ok": True, "email": "studentwellness@dickinson.edu", "stale": 6, "why": ["no https"],
+           "final_url": "https://www.dickinson.edu/wellness"}
+    assert ingest_screened(conn, {**CAND, "url": "https://www.dickinson.edu/wellness"}, res) == "institution"
+    res2 = {"ok": True, "email": "clerk@altoonapa.gov", "stale": 6, "why": []}
+    assert ingest_screened(conn, CAND, res2) == "institution"
+    assert conn.execute("SELECT COUNT(*) FROM prospects").fetchone()[0] == 0
